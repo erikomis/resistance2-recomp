@@ -10,12 +10,10 @@ comes next. Same layout as the Resistance: Fall of Man roadmap.
 
 - **Controllable gameplay in the first level:** boot → menus → New Game →
   intro movies at 30 fps → in-engine cinematic → first-person gameplay with
-  the HUD in `iceland`; the player moves.
-- **About 18 fps in play, with dips:** relocated SPU code still interpreted,
+  the HUD in `iceland`; the player moves. The full-screen image is correct
+  (no split, no border) and a 440-second run had no GPU stall.
+- **About 15–19 fps in play:** relocated SPU code still interpreted,
   synchronous shader compiles.
-- **Display:** the left half of the screen composited wrong in menus and
-  cinematics; in play the image covers ~1152×654 with a light border on the
-  right and at the bottom.
 
 ## Done
 
@@ -46,18 +44,22 @@ comes next. Same layout as the Resistance: Fall of Man roadmap.
   ~5 s to ~1 s).
 - [x] The first level (`iceland`) played into: cinematic, HUD, the player
   moves (scripted 420-second run).
+- [x] The RSX FIFO race: the frame clock / RSX wake-up at 50 µs (was 1 ms)
+  and `put` re-read mid-walk ("FIFO JUMP to unmapped IO", the 5-second "GPU
+  sit and spin timeout", corrupt geometry); no bad jumps in 440 s.
+- [x] The split / duplicated left half: sub-rectangle sampling of the
+  2560×704 AA target; the light border in play gone.
+- [x] The NV0039 memory-to-memory copy engine on subchannel 1.
+- [x] SPU PUTs write their first 128 bytes last (upstream #632, ported).
 
 ## Next
 
 - [ ] (in progress) Performance in the level: lift the SPU code the level
   copies into variable LS addresses (a relocatable lift, as inFAMOUS 2's
   relocatable modules), and take shader compiles off the frame.
-- [ ] The left half of the screen in menus and cinematics (2560-wide
-  buffer / post-processing).
-- [ ] The play image at ~1152×654 with a light border (viewport / display
-  buffer scale).
-- [ ] The intermittent stalls and the shutdown that needs a kill.
-- [ ] Play the first level through by hand; saves, audio in play.
+- [ ] The shutdown that needs a kill.
+- [ ] Play the first level through by hand, with combat; saves, audio in
+  play; the levels after it.
 - [ ] `RES_LEVEL=<n>`: confirm whether the EBOOT honours `-level`.
 - [ ] Find out why the front end leaves port 0 disabled, and replace the
   hook with the real cause's fix.
@@ -65,4 +67,5 @@ comes next. Same layout as the Resistance: Fall of Man roadmap.
   `port/patches.cpp`, as in the Resistance: Fall of Man port.
 - [ ] The desktop launcher, once the game is playable.
 - [ ] Send the generic toolkit fixes upstream (per-instance workload tables,
-  the lost-wake fix, overlay retirement, `ESRCH`).
+  the lost-wake fix, overlay retirement, `ESRCH`, NV0039, the FIFO `put`
+  re-read, sub-rectangle sampling).

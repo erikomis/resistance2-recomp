@@ -10,12 +10,11 @@ vem a seguir. Mesma organização do roadmap do Resistance: Fall of Man.
 
 - **Gameplay controlável na primeira fase:** boot → menus → New Game →
   vídeos de abertura a 30 fps → cinemática na engine → gameplay em primeira
-  pessoa com HUD em `iceland`; o jogador anda.
-- **Uns 18 fps jogando, com quedas:** código SPU relocado ainda
-  interpretado, compilação síncrona de shaders.
-- **Imagem:** a metade esquerda da tela composta errada em menus e
-  cinemáticas; jogando, a imagem ocupa ~1152×654 com uma borda clara à
-  direita e embaixo.
+  pessoa com HUD em `iceland`; o jogador anda. A imagem de tela cheia está
+  correta (sem divisão, sem borda) e um teste de 440 segundos não teve
+  travada da GPU.
+- **Uns 15–19 fps jogando:** código SPU relocado ainda interpretado,
+  compilação síncrona de shaders.
 
 ## Feito
 
@@ -47,6 +46,15 @@ vem a seguir. Mesma organização do roadmap do Resistance: Fall of Man.
   de ~5 s para ~1 s).
 - [x] Entrada na primeira fase (`iceland`): cinemática, HUD, o jogador anda
   (teste roteirizado de 420 segundos).
+- [x] A corrida no FIFO do RSX: o relógio de quadros / do RSX a 50 µs (era
+  1 ms) e o `put` relido no meio da leitura ("FIFO JUMP to unmapped IO", o
+  "GPU sit and spin timeout" de 5 segundos, geometria corrompida); nenhum
+  salto inválido em 440 s.
+- [x] A metade esquerda dividida / duplicada: amostragem de recorte do alvo
+  AA 2560×704; a borda clara jogando sumiu.
+- [x] O motor de cópia de memória NV0039 no subcanal 1.
+- [x] PUTs do SPU escrevem os primeiros 128 bytes por último (upstream #632,
+  portado).
 
 ## Próximos passos
 
@@ -54,12 +62,9 @@ vem a seguir. Mesma organização do roadmap do Resistance: Fall of Man.
   copia para endereços variáveis do LS (uma tradução relocável, como os
   módulos relocáveis do inFAMOUS 2) e tirar a compilação de shaders do
   quadro.
-- [ ] A metade esquerda da tela em menus e cinemáticas (buffer de 2560 de
-  largura / pós-processamento).
-- [ ] A imagem jogando em ~1152×654 com borda clara (viewport / escala do
-  buffer de exibição).
-- [ ] As travadas intermitentes e o encerramento que precisa de um kill.
-- [ ] Jogar a primeira fase inteira à mão; saves, áudio jogando.
+- [ ] O encerramento que precisa de um kill.
+- [ ] Jogar a primeira fase inteira à mão, com combate; saves, áudio
+  jogando; as fases seguintes.
 - [ ] `RES_LEVEL=<n>`: confirmar se o EBOOT aceita `-level`.
 - [ ] Descobrir por que o front end deixa o port 0 desabilitado e trocar o
   hook pela correção da causa real.
@@ -68,4 +73,5 @@ vem a seguir. Mesma organização do roadmap do Resistance: Fall of Man.
 - [ ] O launcher de desktop, quando o jogo estiver jogável.
 - [ ] Mandar as correções genéricas do toolkit para o upstream (tabelas de
   workloads por instância, a correção do despertar perdido, a aposentadoria
-  de overlays, `ESRCH`).
+  de overlays, `ESRCH`, NV0039, a releitura do `put` no FIFO, a amostragem
+  de recorte).

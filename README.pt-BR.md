@@ -10,9 +10,9 @@ gráficos em Metal. Não é um emulador.
 **Ele chega à gameplay controlável na primeira fase.** O jogo roda do boot
 e do aviso de auto-save, pelos vídeos de abertura (nos seus 30 fps) e pelos
 menus, até o New Game, toca a cinemática da fase na engine e passa para a
-gameplay em primeira pessoa com o HUD na primeira fase (`iceland`): o
-jogador anda. Roda a uns 18 fps jogando, com quedas, e a imagem ainda não é
-composta direito; veja [Estado](#estado).
+gameplay em primeira pessoa com o HUD na primeira fase (`iceland`), com a
+imagem de tela cheia correta: o jogador anda. Roda a uns 15–19 fps jogando;
+veja [Estado](#estado).
 
 Construído sobre o [ps3recomp](https://github.com/sp00nznet/ps3recomp), com o
 toolkit, a organização e as ferramentas do
@@ -21,10 +21,10 @@ do mesmo autor. Veja [CREDITS.pt-BR.md](CREDITS.pt-BR.md).
 
 > [!WARNING]
 > **Trabalho em andamento, no começo.** Dá para entrar na primeira fase e
-> andar nela, mas a uns 18 fps e com erros de imagem; ainda não é um jeito
-> acabado de jogar. Não há releases: você mesmo compila o jogo a partir do
-> seu disco. Só macOS com Apple silicon, com controle. O que falta está no
-> [ROADMAP.pt-BR.md](ROADMAP.pt-BR.md).
+> andar nela, mas a uns 15–19 fps, e nada depois dela foi testado; ainda não
+> é um jeito acabado de jogar. Não há releases: você mesmo compila o jogo a
+> partir do seu disco. Só macOS com Apple silicon, com controle. O que falta
+> está no [ROADMAP.pt-BR.md](ROADMAP.pt-BR.md).
 
 > **Este repositório não contém dados do jogo, firmware, chaves da Sony nem
 > nada traduzido a partir deles.** Cada um gera tudo isso localmente a partir
@@ -37,8 +37,9 @@ Em 29/10/2026: boot → aviso de auto-save → vídeos de abertura a 30 fps →
 título e menus (Campaign → New Game → dificuldade) → a primeira fase
 (`iceland`) carrega → cinemática na engine → **gameplay em primeira pessoa
 com HUD**, o jogador anda (um teste roteirizado de 420 segundos levou o
-marcador de objetivo de 23 m para 12 m). Média de uns 18 fps jogando, com
-quedas.
+marcador de objetivo de 23 m para 12 m), com a imagem de tela cheia correta
+(sem divisão, sem borda) e sem travadas da GPU num teste de 440 segundos.
+Uns 15–19 fps jogando.
 
 O que foi preciso, com a causa de cada um:
 
@@ -79,6 +80,27 @@ O que foi preciso, com a causa de cada um:
 - **Eventos de lwcond ligados por padrão:** notificações reais de
   `sys_lwcond` (`PS3_LWCOND_EVENTS=1`, agora o padrão no `port/main.cpp`)
   baixaram a pausa depois do vídeo da Insomniac de ~5 s para ~1 s.
+- **A corrida no FIFO do RSX (travadas de 5 s, geometria explodida, cores
+  néon):** o jogo encadeia um buffer lateral cujo JUMP de volta fica em
+  `put` e reaproveita essa memória para vértices logo depois de mover o
+  `put`. A GPU emulada acordava a cada 1 ms e lia os vértices no lugar do
+  JUMP ("FIFO JUMP to unmapped IO", o "GPU sit and spin timeout" de 5
+  segundos do jogo, estado perdido na ressincronização). O relógio de
+  quadros agora acorda a cada 50 µs (`port/main.cpp`; `PS3_FRAMECLOCK_US`
+  ainda ajusta), e o leitor do FIFO relê o `put` a cada 8 palavras e depois
+  de cada JUMP/CALL/RET. Um teste de 440 segundos: nenhum salto inválido.
+- **Metade esquerda dividida / duplicada:** a cena é desenhada num alvo
+  2560×704 (AA 2×1) e a passada final lê 1280×704 dele com coordenadas não
+  normalizadas, mas o motor de desenho entregava o alvo inteiro. Agora um
+  recorte do tamanho declarado é copiado na GPU. Com essas correções a
+  borda clara em volta da imagem jogando também sumiu.
+- **Cópias de memória NV0039:** o motor de cópia é implementado no subcanal
+  1, onde a libgcm o liga; antes os métodos dele caíam no motor 3D como
+  estado.
+- **Ordem dos PUTs do SPU:** PUT, PUTLLC e PUTLLUC do SPU escrevem os
+  primeiros 128 bytes por último, para quem consulta um cabeçalho nunca o
+  ver antes do conteúdo (port do
+  [#632](https://github.com/sp00nznet/ps3recomp/pull/632) do ps3recomp).
 - **Controle na primeira tela:** o despachante de entrada do front end lia o
   port 0 como desabilitado antes de existir um jogador local, então o X não
   fazia nada no aviso de auto-save. Um hook bem restrito no despachante
@@ -88,16 +110,12 @@ O que foi preciso, com a causa de cada um:
 
 Problemas conhecidos, em andamento:
 
-- **Desempenho na fase (~18 fps, com quedas):** código SPU que a fase copia
-  dos seus dados para endereços variáveis do LS ainda roda no interpretador
+- **Desempenho na fase (~15–19 fps):** código SPU que a fase copia dos
+  seus dados para endereços variáveis do LS ainda roda no interpretador
   (como os módulos relocáveis do inFAMOUS 2: precisa de uma tradução
   relocável), e os shaders compilam de forma síncrona.
-- **Menus e cinemáticas:** a metade esquerda da tela é composta errada (um
-  buffer de 2560 de largura / pós-processamento).
-- **Jogando:** a imagem ocupa uns 1152×654 da janela, com uma borda clara à
-  direita e embaixo (viewport / escala do buffer de exibição).
-- Saves, áudio durante o jogo e qualquer coisa depois da primeira fase não
-  foram testados.
+- Combate, saves, áudio durante o jogo e qualquer coisa depois da primeira
+  fase não foram testados.
 
 ## Como funciona
 
@@ -127,7 +145,9 @@ O toolkit é o ps3recomp v0.17.0 (`a6d76c8`) do upstream mais um patch,
 [`patches/ps3recomp-a6d76c8-resistance2.patch`](patches/): o patch inteiro do
 toolkit do Resistance: Fall of Man mais as mudanças do Resistance 2 (a
 correção do despertar perdido no SPURS, tabelas de workloads do SPURS por
-instância, aposentadoria de overlays de SPU velhos, `ESRCH` para threads que
+instância, aposentadoria de overlays de SPU velhos, o motor de cópia NV0039,
+a releitura do `put` no leitor do FIFO do RSX, a amostragem de um recorte de
+um alvo de cor maior, PUTs do SPU com o cabeçalho escrito por último, `ESRCH` para threads que
 acabaram, notificações reais de `sys_lwcond`, um timebase ancorado na
 primeira leitura e o log de controle com `PS3_PAD_LOG=1`).
 
@@ -201,6 +221,11 @@ Ctrl+C no terminal, para sair.
 | `PS3_LWCOND_EVENTS=0` | `sys_lwcond` volta a dormir e tentar de novo (as notificações reais são o padrão) |
 | `SPURS_LFQ_NOWAKE=1` | desliga a correção do despertar perdido do SPURS (para comparar) |
 | `SPU_OVL_SIG_OFF=1` / `SPU_OVL_SIG_ONLY=<ids>` | roda os módulos de job interpretados / só estes traduzidos (bissecção) |
+| `PS3_FRAMECLOCK_US=<µs>` | o período do relógio de quadros / do RSX (padrão 50; 1000 traz de volta a corrida no FIFO) |
+| `GCM_PUT_LIVE=0` | o leitor do FIFO para de reler o `put` no meio da leitura |
+| `GCM_SUBCH1_M2MF=0` | o subcanal 1 volta ao motor 3D em vez do motor de cópia NV0039 |
+| `GCM_FIFO_STRADDLE=1` | proteção opcional para uma leitura do FIFO que atravessa o `put` (diagnóstico) |
+| `PS3RECOMP_ENG_SUBRECT=0` | desliga a amostragem de recorte de um alvo de cor maior (traz de volta a imagem dividida) |
 
 ### Diagnóstico
 

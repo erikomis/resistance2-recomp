@@ -11,8 +11,8 @@ Metal. It is not an emulator.
 from the boot and the auto-save notice through the intro movies (at their
 30 fps) and the menus to New Game, plays the level's in-engine cinematic and
 hands over to first-person gameplay with the HUD in the first level
-(`iceland`): the player moves. It runs at about 18 fps in play, with dips,
-and the image is not composited right yet; see [Status](#status).
+(`iceland`), with the full-screen image correct: the player moves. It runs
+at about 15–19 fps in play; see [Status](#status).
 
 Built on [ps3recomp](https://github.com/sp00nznet/ps3recomp), with the
 toolkit, the layout and the tools of the author's
@@ -21,10 +21,10 @@ See [CREDITS.md](CREDITS.md).
 
 > [!WARNING]
 > **Early work in progress.** The first level can be entered and walked
-> in, but at about 18 fps and with display bugs; it is not a finished way
-> to play the game. There are no releases: you build the game yourself from
-> your own disc. Apple-silicon macOS only, with a controller. What is missing
-> is in [ROADMAP.md](ROADMAP.md).
+> in, but at about 15–19 fps, and nothing past it has been tested; it is not
+> a finished way to play the game. There are no releases: you build the game
+> yourself from your own disc. Apple-silicon macOS only, with a controller.
+> What is missing is in [ROADMAP.md](ROADMAP.md).
 
 > **This repository contains no game data, no firmware, no Sony keys and
 > nothing translated from them.** Everyone generates all of that locally from
@@ -37,7 +37,8 @@ As of 2026-10-29: boot → auto-save notice → intro movies at 30 fps → title
 and menus (Campaign → New Game → difficulty) → the first level (`iceland`)
 loads → in-engine cinematic → **first-person gameplay with the HUD**, the
 player moves (a scripted 420-second run walked the objective marker from 23 m
-down to 12 m). About 18 fps on average in play, with dips.
+down to 12 m), with the full-screen image correct (no split, no border) and
+no GPU stall in a 440-second run. About 15–19 fps in play.
 
 What it took, with the cause of each:
 
@@ -75,6 +76,27 @@ What it took, with the cause of each:
 - **lwcond events on by default:** real `sys_lwcond` notifications
   (`PS3_LWCOND_EVENTS=1`, now the default in `port/main.cpp`) cut the pause
   after the Insomniac movie from ~5 s to ~1 s.
+- **The RSX FIFO race (5 s stalls, exploded geometry, neon colours):** the
+  game links a side buffer whose JUMP back sits at `put`, and reuses that
+  memory for vertex data right after moving `put` on. The emulated GPU woke
+  every 1 ms and read the vertex data where the JUMP had been ("FIFO JUMP to
+  unmapped IO", the game's 5-second "GPU sit and spin timeout", state lost in
+  the resync). The frame clock now wakes every 50 µs (`port/main.cpp`;
+  `PS3_FRAMECLOCK_US` still sets it), and the FIFO reader re-reads `put`
+  every 8 words and after each JUMP/CALL/RET. A 440-second run: no bad
+  jumps.
+- **Split / duplicated left half:** the scene renders into a 2560×704
+  (2×1 AA) target and the final pass reads 1280×704 of it with unnormalised
+  coordinates, but the draw engine handed over the whole target. It now
+  copies a sub-rectangle of the declared size on the GPU. With these
+  fixes the light border around the play image is gone too.
+- **NV0039 memory-to-memory copies:** the copy engine is implemented on
+  subchannel 1, where libgcm binds it; its methods used to land in the 3D
+  engine as state.
+- **SPU PUT order:** SPU PUT, PUTLLC and PUTLLUC write their first 128 bytes
+  last, so a reader polling a header never sees it before the payload (a
+  port of upstream ps3recomp
+  [#632](https://github.com/sp00nznet/ps3recomp/pull/632)).
 - **Input at the first screen:** the front end's input dispatcher read
   port 0 as disabled before a local player existed, so X did nothing at the
   auto-save notice. A narrowly scoped hook in the lifted dispatcher
@@ -83,15 +105,12 @@ What it took, with the cause of each:
 
 Known issues, being worked on:
 
-- **Performance in the level (~18 fps, with dips):** SPU code that the
-  level copies out of its data into variable LS addresses still runs in the
+- **Performance in the level (~15–19 fps):** SPU code that the level
+  copies out of its data into variable LS addresses still runs in the
   interpreter (like inFAMOUS 2's relocatable modules: it needs a relocatable
   lift), and shaders compile synchronously.
-- **Menus and cinematics:** the left half of the screen is composited
-  wrong (a 2560-wide buffer / post-processing).
-- **In play:** the image covers about 1152×654 of the window, with a light
-  border on the right and at the bottom (viewport / display buffer scale).
-- Saves, audio during play, and anything past the first level are untested.
+- Combat, saves, audio during play, and anything past the first level are
+  untested.
 
 ## How it works
 
@@ -119,7 +138,9 @@ The toolkit is upstream ps3recomp v0.17.0 (`a6d76c8`) plus one patch,
 [`patches/ps3recomp-a6d76c8-resistance2.patch`](patches/): the whole
 Resistance: Fall of Man toolkit patch plus the Resistance 2 changes (the
 SPURS lost-wake fix, per-instance SPURS workload tables, stale SPU overlay
-retirement, `ESRCH` for exited threads, real `sys_lwcond` notifications, a
+retirement, the NV0039 copy engine, `put` re-read in the RSX FIFO reader,
+sub-rectangle sampling of a larger colour target, SPU PUTs with their head
+written last, `ESRCH` for exited threads, real `sys_lwcond` notifications, a
 timebase anchored at first read, and input logging with `PS3_PAD_LOG=1`).
 
 ## Building from source
@@ -192,6 +213,11 @@ Ctrl+C in the terminal, to quit.
 | `PS3_LWCOND_EVENTS=0` | `sys_lwcond` back to sleep-and-retry polling (real notifications are the default) |
 | `SPURS_LFQ_NOWAKE=1` | turns off the SPURS lost-wake fix (for comparison) |
 | `SPU_OVL_SIG_OFF=1` / `SPU_OVL_SIG_ONLY=<ids>` | run the job modules interpreted / only these lifted (bisection) |
+| `PS3_FRAMECLOCK_US=<µs>` | the frame clock / RSX wake-up period (default 50; 1000 brings back the FIFO race) |
+| `GCM_PUT_LIVE=0` | the FIFO reader stops re-reading `put` mid-walk |
+| `GCM_SUBCH1_M2MF=0` | subchannel 1 back to the 3D engine instead of the NV0039 copy engine |
+| `GCM_FIFO_STRADDLE=1` | opt-in guard for a FIFO walk that straddles `put` (diagnostic) |
+| `PS3RECOMP_ENG_SUBRECT=0` | turns off sub-rectangle sampling of a larger colour target (brings back the split image) |
 
 ### Diagnostics
 

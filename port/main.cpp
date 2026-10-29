@@ -204,8 +204,14 @@ static DWORD WINAPI frame_clock(LPVOID)
      * The FIFO has no doorbell: a put the guest writes, a flip it asks for,
      * waits here until the next pass, so this is also the latency of every
      * one of those. It was a fixed 4 ms, which left the RSX thread idle up to
-     * 4 ms after each flip request. Default 1000; 4000 is the old pacing. */
-    int clock_us = 1000;
+     * 4 ms after each flip request. Default 50 (below); 4000 is the old pacing. */
+    /* Resistance 2 needs the RSX to react to a put in microseconds: it links
+     * a side buffer whose JUMP back sits at put, and reuses that memory for
+     * dynamic vertex data right after moving put on. At 1 ms the walker read
+     * the vertex data there instead of the JUMP ("FIFO JUMP to unmapped IO",
+     * the title's 5 s "GPU sit and spin timeout", corrupt geometry after the
+     * resync); at 50 us none in a 440 s run into gameplay. */
+    int clock_us = 50;
     { const char* e = getenv("PS3_FRAMECLOCK_US"); if (e && atoi(e) > 0) clock_us = atoi(e); }
     /* PS3_VBLANK_HZ=<hz> (10..1000): the vblank rate, which also bounds the
      * flip rate. Default one tick per 16 ms (62.5 Hz). */

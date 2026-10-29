@@ -37,6 +37,11 @@ to that port), with their authors kept in the patch headers:
 - **erikomis** — `getenv` looked up once per call site ([#515](https://github.com/sp00nznet/ps3recomp/pull/515)); audio volume
   and output device; the opt-in `usleep` spin.
 
+The Resistance 2 changes add:
+
+- **Ryan Setyanto** ([@rigaz29](https://github.com/rigaz29)) — an SPU PUT's
+  first 128 bytes written last ([#632](https://github.com/sp00nznet/ps3recomp/pull/632), ported).
+
 ## The ports it follows
 
 - **[resistance-recomp](https://github.com/erikomis/resistance-recomp)** —

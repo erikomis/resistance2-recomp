@@ -39,6 +39,11 @@ contém) traz estes pull requests do ps3recomp (alguns adaptados à v0.17.0 ou
 - **erikomis** — `getenv` consultado uma vez por ponto de chamada ([#515](https://github.com/sp00nznet/ps3recomp/pull/515));
   volume e saída de áudio; o giro opcional do `usleep`.
 
+As mudanças do Resistance 2 acrescentam:
+
+- **Ryan Setyanto** ([@rigaz29](https://github.com/rigaz29)) — os primeiros
+  128 bytes de um PUT do SPU escritos por último ([#632](https://github.com/sp00nznet/ps3recomp/pull/632), portado).
+
 ## Os ports que servem de modelo
 
 - **[resistance-recomp](https://github.com/erikomis/resistance-recomp)** — o
