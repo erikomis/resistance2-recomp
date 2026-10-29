@@ -68,8 +68,11 @@ vem a seguir. Mesma organização do roadmap do Resistance: Fall of Man.
 - [ ] `RES_LEVEL=<n>`: confirmar se o EBOOT aceita `-level`.
 - [ ] Descobrir por que o front end deixa o port 0 desabilitado e trocar o
   hook pela correção da causa real.
-- [ ] Trazer os patches da comunidade de 60 fps e campo de visão do
-  BCUS98120 para o `port/patches.cpp`, como no port do Resistance: Fall of Man.
+- [ ] 30 fps constantes no jogo todo, sem travamentos.
+- [ ] Depois, 60 fps: trazer os patches da comunidade de destrave de quadros
+  e campo de visão do BCUS98120 para o `port/patches.cpp` e rodar o relógio de
+  vblank a 120 Hz com `g_res_vblank_hz` (que já existe no `port/patches.cpp`),
+  como o port do Resistance: Fall of Man faz com `RES_UNLOCK_FPS=1`.
 - [ ] O launcher de desktop, quando o jogo estiver jogável.
 - [ ] Mandar as correções genéricas do toolkit para o upstream (tabelas de
   workloads por instância, a correção do despertar perdido, a aposentadoria

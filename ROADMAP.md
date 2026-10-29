@@ -63,8 +63,11 @@ comes next. Same layout as the Resistance: Fall of Man roadmap.
 - [ ] `RES_LEVEL=<n>`: confirm whether the EBOOT honours `-level`.
 - [ ] Find out why the front end leaves port 0 disabled, and replace the
   hook with the real cause's fix.
-- [ ] Take the 60 fps and field-of-view community patches for BCUS98120 into
-  `port/patches.cpp`, as in the Resistance: Fall of Man port.
+- [ ] A constant 30 fps through the whole game, with no hangs.
+- [ ] Then 60 fps: take the community's frame-rate unlock and field-of-view
+  patches for BCUS98120 into `port/patches.cpp` and run the vblank clock at
+  120 Hz through `g_res_vblank_hz` (already in `port/patches.cpp`), as the
+  Resistance: Fall of Man port does with `RES_UNLOCK_FPS=1`.
 - [ ] The desktop launcher, once the game is playable.
 - [ ] Send the generic toolkit fixes upstream (per-instance workload tables,
   the lost-wake fix, overlay retirement, `ESRCH`, NV0039, the FIFO `put`
