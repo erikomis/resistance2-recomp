@@ -413,6 +413,20 @@ int main(int argc, char** argv)
         else if (strcmp(s, "0") == 0) unsetenv("SPURS_RPCS3_SCHED");
 #endif
     }
+    /* Real sys_lwcond notifications instead of the 1 ms sleep-and-retry
+     * fallback. R2's job/loader worker pools (func_00B11A80 x14,
+     * func_007D9EB8 x8) hand work over through lwconds; at ~1.2 ms per
+     * handoff the front-end load after the Insomniac movie froze the guest
+     * for 5-6 s, with events ~1 s (A/B on one binary). PS3_LWCOND_EVENTS=0
+     * restores the fallback. ppu_lwcond_events.h reads it once, lazily. */
+    {
+        const char* s = getenv("PS3_LWCOND_EVENTS");
+#ifdef _WIN32
+        if (!s) _putenv_s("PS3_LWCOND_EVENTS", "1");
+#else
+        if (!s) setenv("PS3_LWCOND_EVENTS", "1", 1);
+#endif
+    }
 
     const char* title = getenv("PS3_TITLE");
     if (!title || !*title) title = "Resistance 2";

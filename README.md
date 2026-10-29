@@ -7,12 +7,12 @@ built with static recompilation: the game's PowerPC and SPU code is
 translated to C/C++ and compiled into a native executable, with graphics on
 Metal. It is not an emulator.
 
-**It boots and reaches the first level.** The game runs from the boot and the
-auto-save notice through the intro movies and the menus to a new campaign,
-and the first level renders in the engine. The Bink movies play at their
-30 fps now that the raw-SPU Bink decoder is lifted instead of interpreted.
-Inside the level it is still far too slow to play (about 5 fps) and the view
-has a white border; see [Status](#status).
+**It reaches controllable gameplay in the first level.** The game runs
+from the boot and the auto-save notice through the intro movies (at their
+30 fps) and the menus to New Game, plays the level's in-engine cinematic and
+hands over to first-person gameplay with the HUD in the first level
+(`iceland`): the player moves. It runs at about 18 fps in play, with dips,
+and the image is not composited right yet; see [Status](#status).
 
 Built on [ps3recomp](https://github.com/sp00nznet/ps3recomp), with the
 toolkit, the layout and the tools of the author's
@@ -20,10 +20,11 @@ toolkit, the layout and the tools of the author's
 See [CREDITS.md](CREDITS.md).
 
 > [!WARNING]
-> **Early work in progress.** Not playable yet: the campaign starts, but the
-> first level runs at about 5 fps. There are no releases: you build the game
-> yourself from your own disc. Apple-silicon macOS only, with a controller.
-> What is missing is in [ROADMAP.md](ROADMAP.md).
+> **Early work in progress.** The first level can be entered and walked
+> in, but at about 18 fps and with display bugs; it is not a finished way
+> to play the game. There are no releases: you build the game yourself from
+> your own disc. Apple-silicon macOS only, with a controller. What is missing
+> is in [ROADMAP.md](ROADMAP.md).
 
 > **This repository contains no game data, no firmware, no Sony keys and
 > nothing translated from them.** Everyone generates all of that locally from
@@ -32,41 +33,64 @@ See [CREDITS.md](CREDITS.md).
 
 ## Status
 
-As of 2026-10-29:
+As of 2026-10-29: boot → auto-save notice → intro movies at 30 fps → title
+and menus (Campaign → New Game → difficulty) → the first level (`iceland`)
+loads → in-engine cinematic → **first-person gameplay with the HUD**, the
+player moves (a scripted 420-second run walked the objective marker from 23 m
+down to 12 m). About 18 fps on average in play, with dips.
 
-- **Boot and menus:** Metal, audio and the controller come up; the auto-save
-  notice, the intro movies and the menus run to **a new campaign**.
+What it took, with the cause of each:
+
+- **SPURS r4 layout:** the Wws_Job policy module takes the canonical r4
+  layout (word 1 = the job list). Putting the list in word 0 made it read
+  the list as an audit buffer, write `FFFFFFFF` over it and exit without
+  running a job: the "render db spu timeout in WaitTillReady" freeze ~90 s
+  in. The port no longer sets `SPURS_PM_R4_WORD0`.
+- **`ESRCH` for exited threads:** the save system waits for its "Check
+  Thread" to go away by polling `sys_ppu_thread_get_priority` until it gets
+  `ESRCH`; the runtime answered OK for exited threads and "New Game" hung.
+- **Raw-SPU programs lifted:** the Bink decoder and the two programs the
+  levels run every frame are raw SPU bytes (a `DEADDEAD` header, not ELFs)
+  that `igInitRawSpu` streams into LS `0x200`. The image scanner never saw
+  them and they ran in the interpreter (movies at ~3 fps).
+  `tools/prepare_r2_rawspu.py` lifts all three; they register as resident
+  code regions by source address. The Wws_Job policy module (also raw
+  bytes) is lifted by `tools/prepare_r2_job_pm.py`.
+- **LFQueue lost wake-up:** an intermittent hang loading the level, between
+  the PPU's push on a lock-free queue and the zlib task's `WAIT_SIGNAL`. The
+  task now registers as parked before it re-checks the queue, with fences on
+  both sides.
+- **Per-instance workload IDs:** the game runs two SPURS instances; the
+  runtime numbered workloads with one global counter of 16, so the 17th
+  ("triangulate") got no ID and the job API asserted. `cellSpurs.c`'s
+  workload tables are now per instance.
+- **29 lifted job modules:** the WWS job modules (`0xC0DEC0DE` headers in
+  the EBOOT, loaded at LS `0x4000`) are lifted by `tools/regen_r2_jobmods.sh`
+  and registered by signature.
+- **Stale overlay retirement:** the job manager also loads bodies that are
+  not among those 29 at `0x4000`; the runtime kept the previous module
+  "resident" and ran its lifted code over the new bytes (garbage geometry in
+  play). An overlay is now retired when its header in LS is overwritten
+  (A/B switches: `SPU_OVL_SIG_OFF=1`, `SPU_OVL_SIG_ONLY=<ids>`).
+- **lwcond events on by default:** real `sys_lwcond` notifications
+  (`PS3_LWCOND_EVENTS=1`, now the default in `port/main.cpp`) cut the pause
+  after the Insomniac movie from ~5 s to ~1 s.
 - **Input at the first screen:** the front end's input dispatcher read
   port 0 as disabled before a local player existed, so X did nothing at the
   auto-save notice. A narrowly scoped hook in the lifted dispatcher
   (`tools/apply_r2_frontend_patch.py`, applied at configure time; switch:
   `RES_FRONTEND_PORT0=0`) keeps port 0's events flowing. It injects nothing.
-- **Movies at 30 fps:** the Bink decoder runs on a raw SPU and is streamed
-  in as raw bytes (not an ELF), so the image scanner never saw it and it ran
-  in the SPU interpreter at ~3 fps. It is now cut out of the EBOOT and lifted
-  (`tools/prepare_r2_bink.py`), with the 320-byte raw-SPU loader
-  (`tools/prepare_r2_rawspu.py`).
-- **The job queue runs:** the Wws_Job SPU policy module is raw bytes in the
-  EBOOT too; it is lifted (`tools/prepare_r2_job_pm.py`) and registered by
-  fingerprint. A lost wake-up in the SPURS task `WAIT_SIGNAL` path (a job
-  pushed while the task was awake was never seen) froze the level load; the
-  toolkit now treats a wait on a lock-free queue that already holds entries
-  as satisfied.
-- **New Game:** the game polls its save "check thread" until LV2 reports it
-  gone (`ESRCH`); the runtime reported it alive for ever and "New Game"
-  hung. Fixed in `sys_ppu_thread_get_priority`.
-- **First level in the engine:** the campaign loads and renders the first
-  level.
 
 Known issues, being worked on:
 
-- **About 5 fps in the level.** The WWS SPU job modules (29 `0xC0DEC0DE`
-  modules in the EBOOT) still run in the SPU interpreter. Lifting them
-  (`tools/regen_r2_jobmods.sh`) is in progress: some report unsupported
-  instructions and they still need checking one by one.
-- **Viewport:** a white border around the view inside the level.
-- **Intermittent problems** (occasional stalls, the shutdown needing a
-  kill) under investigation.
+- **Performance in the level (~18 fps, with dips):** SPU code that the
+  level copies out of its data into variable LS addresses still runs in the
+  interpreter (like inFAMOUS 2's relocatable modules: it needs a relocatable
+  lift), and shaders compile synchronously.
+- **Menus and cinematics:** the left half of the screen is composited
+  wrong (a 2560-wide buffer / post-processing).
+- **In play:** the image covers about 1152×654 of the window, with a light
+  border on the right and at the bottom (viewport / display buffer scale).
 - Saves, audio during play, and anything past the first level are untested.
 
 ## How it works
@@ -80,9 +104,10 @@ Same pipeline as the Resistance: Fall of Man port:
 3. **SPU code:** the SPU ELFs embedded in the EBOOT are found and lifted by
    the build (`PORT_SPU_INPUTS`). Resistance 2 also keeps SPU code as raw
    bytes, which no scanner finds: the Wws_Job policy module (EBOOT VA
-   `0x00CF9680`, LS `0xA00`), the raw-SPU Bink decoder (`0x00EB6580`,
+   `0x00CF9680`, LS `0xA00`), the three raw-SPU programs (the Bink decoder
+   at `0x00EB6580` and two level programs at `0x00E9B400` and `0x00EA2580`,
    LS `0x200`), the raw-SPU loader `igInitRawSpu` (`0x00ED2330`, LS `0x10`)
-   and the WWS job modules. The `tools/prepare_r2_*.py` scripts and
+   and the 29 WWS job modules. The `tools/prepare_r2_*.py` scripts and
    `tools/regen_r2_jobmods.sh` cut each one out of your EBOOT, check its
    fingerprint against the tested executable and lift it.
 4. **Build** with CMake/Ninja against the patched toolkit: the runtime (LV2
@@ -93,9 +118,9 @@ Same pipeline as the Resistance: Fall of Man port:
 The toolkit is upstream ps3recomp v0.17.0 (`a6d76c8`) plus one patch,
 [`patches/ps3recomp-a6d76c8-resistance2.patch`](patches/): the whole
 Resistance: Fall of Man toolkit patch plus the Resistance 2 changes (the
-SPURS lost-wake fix, `ESRCH` for exited threads, optional real `sys_lwcond`
-notifications with `PS3_LWCOND_EVENTS=1`, a timebase anchored at first read,
-and input logging with `PS3_PAD_LOG=1`).
+SPURS lost-wake fix, per-instance SPURS workload tables, stale SPU overlay
+retirement, `ESRCH` for exited threads, real `sys_lwcond` notifications, a
+timebase anchored at first read, and input logging with `PS3_PAD_LOG=1`).
 
 ## Building from source
 
@@ -131,7 +156,7 @@ tools/rebuild.sh            # toolkit, decrypt, analyse, lift, spu, build
 | `decrypt` | copies `EBOOT.BIN` and `PARAM.SFO` from the disc to `game/BCUS98120/` and decrypts the EBOOT with RPCS3 (`RPCS3=<path>` if it is not in `/Applications`) |
 | `analyse` | `ppu_loader.py` → `analysis/BCUS98120/` |
 | `lift` | `ppu_lifter.py` → `recompiled/BCUS98120/` (24 chunks; set `JOBS` to limit parallelism) |
-| `spu` | `prepare_r2_job_pm.py`, `prepare_r2_bink.py`, `regen_r2_jobmods.sh` → `port/spu/`; `prepare_r2_rawspu.py` → `game/BCUS98120/spu_images/` |
+| `spu` | `prepare_r2_job_pm.py`, `prepare_r2_rawspu.py`, `regen_r2_jobmods.sh` → `port/spu/`; `prepare_r2_rawspu_loader.py` → `game/BCUS98120/spu_images/` |
 | `build` | CMake + Ninja → `build/BCUS98120/ResistanceRecomp` and `build/BCUS98120/Resistance` |
 
 The first build compiles a lot of generated code and takes a while. The
@@ -164,8 +189,9 @@ Ctrl+C in the terminal, to quit.
 | `RES_HTTP_POLL_COMPAT=0` | `cellHttpClientPollConnections` back to the toolkit's default (it now reports "unavailable" so the game's HTTP thread does not spin) |
 | `RES_LEVEL=<n>` | passes `-level <n>` to the game; not confirmed to work yet |
 | `PS3_PAD_LOG=0` | turns off the controller button log (on in `play.sh`) |
-| `PS3_LWCOND_EVENTS=1` | real `sys_lwcond` notifications instead of polling (experimental) |
+| `PS3_LWCOND_EVENTS=0` | `sys_lwcond` back to sleep-and-retry polling (real notifications are the default) |
 | `SPURS_LFQ_NOWAKE=1` | turns off the SPURS lost-wake fix (for comparison) |
+| `SPU_OVL_SIG_OFF=1` / `SPU_OVL_SIG_ONLY=<ids>` | run the job modules interpreted / only these lifted (bisection) |
 
 ### Diagnostics
 
@@ -173,8 +199,16 @@ Ctrl+C in the terminal, to quit.
 your HDD folders, presses buttons from a script (`--buttons`), saves frame
 dumps every five seconds and writes `probe.json` and `summary.json` in
 `build/r2-probe-<label>-*/` (`--help` lists the probes: SPU dumps, CPU
-sampling, SPURS statistics, memory watches). `tools/compare_r2_logs.py`
-lines a probe log up against an RPCS3 log of the same title.
+sampling, SPURS statistics, memory watches; `--env KEY=VALUE` adds any
+variable). Into the first level and walking, as tested:
+
+```sh
+B="12:0x4000,20:0x4000"; for t in $(seq 30 8 110); do B="$B,$t:0x4008"; done
+python3 tools/r2_input_probe.py --label level --buttons "$B" --seconds 320
+```
+
+`tools/compare_r2_logs.py` lines a probe log up against an RPCS3 log of the
+same title.
 
 ## Updating the toolkit patch
 
@@ -195,9 +229,9 @@ home paths, and checks the result applies to a clean `a6d76c8`.
 
 | Path | What it is |
 | --- | --- |
-| [`port/`](port/) | The port: `main.cpp` (boot, guest thread), `stubs.cpp`, `patches.cpp` (the front-end input hook switch, `cellHttpClientPollConnections`), `CMakeLists.txt` (with the `Resistance` window target), `config.toml`, `spu/` (`spu_workloads.c` and the `register.c` of the raw SPU modules; their lifted code is generated here, never committed) |
+| [`port/`](port/) | The port: `main.cpp` (boot, guest thread), `stubs.cpp`, `patches.cpp` (the front-end input hook switch, `cellHttpClientPollConnections`), `CMakeLists.txt` (with the `Resistance` window target), `config.toml`, `spu/` (`spu_workloads.c` and the policy module's `register.c`; the lifted code of the raw SPU modules and job modules, and the raw-SPU programs' `register.c`, are generated here and never committed) |
 | [`patches/`](patches/) | The toolkit patch over ps3recomp v0.17.0 |
-| [`tools/`](tools/) | `setup_toolkit.sh`, `rebuild.sh`, `play.sh`, `env.sh`, `prepare_r2_job_pm.py`, `prepare_r2_bink.py`, `prepare_r2_rawspu.py`, `regen_r2_jobmods.sh`, `extract_jobmods_elf.py`, `apply_r2_frontend_patch.py`, `r2_input_probe.py`, `compare_r2_logs.py`, `export_toolkit_patch.sh`, `r2_layout.py` |
+| [`tools/`](tools/) | `setup_toolkit.sh`, `rebuild.sh`, `play.sh`, `env.sh`, `prepare_r2_job_pm.py`, `prepare_r2_rawspu.py`, `prepare_r2_rawspu_loader.py`, `regen_r2_jobmods.sh`, `extract_jobmods_elf.py`, `apply_r2_frontend_patch.py`, `r2_input_probe.py`, `compare_r2_logs.py`, `export_toolkit_patch.sh`, `r2_layout.py` |
 | [`ROADMAP.md`](ROADMAP.md) | Status and next steps |
 
 ## License

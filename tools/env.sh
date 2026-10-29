@@ -9,7 +9,7 @@
 #                 $RES_BUILD/BCUS98120/Resistance        the window (launcher)
 #   RES_GAME      the decrypted EBOOT and what is cut out of it (default:
 #                 $RES_ROOT/game/BCUS98120): EBOOT.elf, PARAM.SFO,
-#                 spu_images/ (tools/prepare_r2_rawspu.py)
+#                 spu_images/ (tools/prepare_r2_rawspu_loader.py)
 #   RES_OUT       scratch output of the SPU tools (default: $RES_ROOT/out)
 #   RES_DATA      saves, HDD folders and the log (default:
 #                 ~/Library/Application Support/resistance-recomp-2)
@@ -39,7 +39,7 @@ fi
 export PY
 
 # The SPU programs the build scans: the EBOOT's own SPU ELFs, plus the raw-SPU
-# loader cut out of it (tools/prepare_r2_rawspu.py).
+# loader cut out of it (tools/prepare_r2_rawspu_loader.py).
 res_spu_inputs() {
     local inputs=$E f
     for f in "$RES_GAME"/spu_images/*.elf(N); do inputs="$inputs;$f"; done

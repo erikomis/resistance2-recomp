@@ -15,9 +15,11 @@
 #   lift     toolkit tools/ppu_lifter.py -> recompiled/BCUS98120 (24 chunks)
 #   spu      the SPU code the image scanner cannot find on its own, all cut
 #            out of EBOOT.elf: tools/prepare_r2_job_pm.py (the Wws_Job policy
-#            module), tools/prepare_r2_bink.py (the raw-SPU Bink decoder),
-#            tools/regen_r2_jobmods.sh (the WWS job modules) -> port/spu/, and
-#            tools/prepare_r2_rawspu.py (the raw-SPU loader) -> game/BCUS98120/spu_images/
+#            module), tools/prepare_r2_rawspu.py (the three raw-SPU programs:
+#            the Bink decoder and two the levels run), tools/regen_r2_jobmods.sh
+#            (the 29 WWS job modules) -> port/spu/, and
+#            tools/prepare_r2_rawspu_loader.py (the raw-SPU loader)
+#            -> game/BCUS98120/spu_images/
 #   build    cmake + ninja -> build/BCUS98120/ResistanceRecomp and
 #            build/BCUS98120/Resistance (the window tools/play.sh runs);
 #            Metal, FFmpeg video. The lifted PPU code's frontend input hook
@@ -74,11 +76,11 @@ for s in $steps; do
             --functions "$AN/EBOOT.functions.json" --hle-stubs "$AN/EBOOT.imports.json" \
             --output "$RC" ;;
     spu)
-        say "spu (policy module, Bink decoder, job modules, raw-SPU loader)"
+        say "spu (policy module, raw-SPU programs, job modules, raw-SPU loader)"
         PS3RECOMP_DIR=$TK "$PY" "$here/prepare_r2_job_pm.py" --eboot "$E"
-        PS3RECOMP_DIR=$TK "$PY" "$here/prepare_r2_bink.py" --eboot "$E"
+        PS3RECOMP_DIR=$TK "$PY" "$here/prepare_r2_rawspu.py" --eboot "$E"
         PS3RECOMP_DIR=$TK "$here/regen_r2_jobmods.sh" "$E"
-        PS3RECOMP_DIR=$TK "$PY" "$here/prepare_r2_rawspu.py" --eboot "$E" --out "$RES_GAME/spu_images" ;;
+        PS3RECOMP_DIR=$TK "$PY" "$here/prepare_r2_rawspu_loader.py" --eboot "$E" --out "$RES_GAME/spu_images" ;;
     build)
         say "build"
         bp=${HOMEBREW_PREFIX:-$(brew --prefix 2>/dev/null)}

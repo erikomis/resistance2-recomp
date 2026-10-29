@@ -217,24 +217,26 @@ if(PORT_ENABLE_SPU AND EXISTS "${SPU_DIR}/r2_job_pm/spu_recomp.c")
         "${SPU_DIR}/r2_job_pm/register.c")
 endif()
 
-# The raw-SPU Bink decoder is raw bytes too (EBOOT VA 0x00EB6580, LS 0x200);
-# interpreted it played movies at ~3 FPS. tools/prepare_r2_bink.py lifts it.
+# The raw-SPU programs igInitRawSpu streams in (the Bink decoder and two the
+# levels run every frame) are raw bytes too, LS 0x200; interpreted, movies ran
+# ~3 FPS. tools/prepare_r2_rawspu.py lifts them into spu/r2_<name>/.
 if(PORT_ENABLE_SPU AND EXISTS "${SPU_DIR}/r2_bink/spu_recomp.c")
     find_package(Python3 COMPONENTS Interpreter REQUIRED)
     set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
-        "${R2_TOOLS_DIR}/prepare_r2_bink.py"
-        "${SPU_DIR}/r2_bink/image.bin")
+        "${R2_TOOLS_DIR}/prepare_r2_rawspu.py")
     execute_process(COMMAND "${Python3_EXECUTABLE}"
-        "${R2_TOOLS_DIR}/prepare_r2_bink.py" --check
-        --eboot "${R2_EBOOT}" --dest "${SPU_DIR}/r2_bink"
-        RESULT_VARIABLE r2_bink_check OUTPUT_VARIABLE r2_bink_msg ERROR_VARIABLE r2_bink_err)
-    if(NOT r2_bink_check EQUAL 0)
-        message(FATAL_ERROR "R2 Bink SPU validation failed: ${r2_bink_err}")
+        "${R2_TOOLS_DIR}/prepare_r2_rawspu.py" --check
+        --eboot "${R2_EBOOT}" --spu-dir "${SPU_DIR}"
+        RESULT_VARIABLE r2_raw_check OUTPUT_VARIABLE r2_raw_msg ERROR_VARIABLE r2_raw_err)
+    if(NOT r2_raw_check EQUAL 0)
+        message(FATAL_ERROR "R2 raw SPU validation failed: ${r2_raw_err}")
     endif()
-    message(STATUS "${r2_bink_msg}")
-    list(APPEND SPU_SOURCES
-        "${SPU_DIR}/r2_bink/spu_recomp.c"
-        "${SPU_DIR}/r2_bink/register.c")
+    message(STATUS "${r2_raw_msg}")
+    foreach(prog IN ITEMS bink rawspu_a rawspu_b)
+        list(APPEND SPU_SOURCES
+            "${SPU_DIR}/r2_${prog}/spu_recomp.c"
+            "${SPU_DIR}/r2_${prog}/register.c")
+    endforeach()
 endif()
 
 # The WWS job modules (0xC0DEC0DE headers in the EBOOT) the Wws_Job policy
