@@ -55,31 +55,49 @@ vem a seguir. Mesma organização do roadmap do Resistance: Fall of Man.
 - [x] O motor de cópia de memória NV0039 no subcanal 1.
 - [x] PUTs do SPU escrevem os primeiros 128 bytes por último (upstream #632,
   portado).
+- [x] A primeira fase jogada inteira à mão, com combate e diálogos, até a
+  segunda fase (`bay area`); sessões de 70 minutos sem travar.
+- [x] Superfícies neon e geometria sumindo minutos dentro da fase: a tabela
+  de 4096 pipelines enchia e os desenhos de pipelines novos eram
+  descartados; agora 65536.
+- [x] Gameplay normal de ~15 para 28–30 fps: mapas de sombra e reduções de
+  profundidade na GPU, leitura de vértices por atributo (upstream #458), um
+  cache de vértices que guarda e confere por amostragem, decodificação
+  swizzled mais rápida (upstream #578).
+- [x] Engasgos de shader: traduções em cache entre sessões e builds, quatro
+  compilações em segundo plano, as em cache compiladas na hora (sem flash ao
+  mirar).
+- [x] Saves: `cellSaveDataUserListAutoSave` / `UserListSave` /
+  `UserListLoad` implementadas (antes nada era gravado).
+- [x] Instalação no HDD: o jogo copia seus caches e o diálogo em streaming no
+  primeiro boot (`cellGameDataCheckCreate2` responde instalação nova).
+- [x] Logs das sessões: linhas com tempo, as 10 últimas guardadas, uma linha
+  de telemetria por segundo, relatório de travada de 3 s e detalhe das
+  passadas longas.
 
 ## Próximos passos
 
-- [ ] (em andamento) Desempenho na fase: traduzir o código SPU que a fase
-  copia para endereços variáveis do LS (uma tradução relocável, como os
-  módulos relocáveis do inFAMOUS 2) e tirar a compilação de shaders do
-  quadro.
+- [ ] (em andamento) Combate pesado cai para 4–15 fps: parar de conferir os
+  buffers de vértice que o SPU refaz a cada quadro
+  (`PS3RECOMP_ENG_VCACHE_CHURN`), um fluxo de vértices por atributo para
+  cortar o número de pipelines (`PS3RECOMP_ENG_PLANAR`), reaproveitar os
+  alvos de sombra em vez de recriá-los.
+- [ ] (em andamento) Efeitos: quadrados pretos no lugar de vapor/água,
+  faíscas elétricas estranhas, uma distorção como água acompanhando a
+  câmera, o fundo do menu de pausa (redução de profundidade na GPU:
+  `PS3RECOMP_ENG_BLIT_GPU`, desligada até ser verificada), neblina um pouco
+  mais escura que no PS3.
+- [ ] Confirmar os saves entre sessões (checkpoint, sair, Continuar).
+- [ ] Traduzir o código SPU que as fases copiam para endereços variáveis do
+  LS (uma tradução relocável, como os módulos relocáveis do inFAMOUS 2).
 - [ ] O encerramento que precisa de um kill.
-- [ ] Jogar a primeira fase inteira à mão, com combate; saves, áudio
-  jogando; as fases seguintes.
+- [ ] As fases depois de `bay area`.
 - [ ] `RES_LEVEL=<n>`: confirmar se o EBOOT aceita `-level`.
 - [ ] Descobrir por que o front end deixa o port 0 desabilitado e trocar o
   hook pela correção da causa real.
 - [ ] 30 fps constantes no jogo todo, sem travamentos. Em 30/10/2026 a
-  gameplay da primeira fase roda a cerca de 28 fps de média e 30 de mediana
-  (eram 14,5), e os quadros de 100 ms ou mais caíram de 27 para 4 por minuto:
-  mapas de sombra e reduções de profundidade ficam na GPU
-  (`PS3RECOMP_ENG_ZETA16_GPU`, `PS3RECOMP_ENG_BLIT_GPU`), leitura de vértices
-  por atributo (upstream #458, `PS3RECOMP_ENG_FETCH_MANY`), cache de vértices
-  que não recomeça mais (`PS3RECOMP_ENG_VCACHE_KEEP2`), decodificação de
-  texturas swizzled mais rápida (upstream #578) e traduções de shader em cache
-  entre sessões e builds, compiladas em segundo plano (`tools/play.sh`).
-  Falta: esperas da GPU em cópias de cor, hash do cache de vértices,
-  decodificação do FIFO, as superfícies em cores neon ao mirar e em áreas
-  mais adiante.
+  gameplay normal fica em 28–30 fps (eram 14,5) e os quadros de 100 ms ou
+  mais caíram de 27 para uns 3 por minuto; falta o combate pesado.
 - [ ] Depois, 60 fps: trazer os patches da comunidade de destrave de quadros
   e campo de visão do BCUS98120 para o `port/patches.cpp` e rodar o relógio de
   vblank a 120 Hz com `g_res_vblank_hz` (que já existe no `port/patches.cpp`),

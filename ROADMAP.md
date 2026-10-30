@@ -51,29 +51,46 @@ comes next. Same layout as the Resistance: Fall of Man roadmap.
   2560×704 AA target; the light border in play gone.
 - [x] The NV0039 memory-to-memory copy engine on subchannel 1.
 - [x] SPU PUTs write their first 128 bytes last (upstream #632, ported).
+- [x] The first level played through by hand, with combat and dialogue,
+  into the second level (`bay area`); 70-minute sessions without a hang.
+- [x] Neon surfaces and missing geometry minutes into a level: the 4096-entry
+  pipeline table filled and new pipelines' draws were dropped; now 65536.
+- [x] Normal gameplay from ~15 to 28–30 fps: shadow maps and depth
+  downsamples on the GPU, attribute-major vertex fetch (upstream #458), a
+  vertex cache that keeps and samples its geometry, faster swizzled decode
+  (upstream #578).
+- [x] Shader hitches: translations cached across sessions and builds, four
+  background builds, cached ones built at once (no flash when aiming).
+- [x] Saves: `cellSaveDataUserListAutoSave` / `UserListSave` /
+  `UserListLoad` implemented (nothing was written before).
+- [x] HDD install: the game copies its caches and streamed dialogue on first
+  boot (`cellGameDataCheckCreate2` reports a new install).
+- [x] Session logs: timestamped lines, the last 10 kept, a per-second
+  telemetry line, a 3-second stall report and long-pass breakdowns.
 
 ## Next
 
-- [ ] (in progress) Performance in the level: lift the SPU code the level
-  copies into variable LS addresses (a relocatable lift, as inFAMOUS 2's
-  relocatable modules), and take shader compiles off the frame.
+- [ ] (in progress) Heavy combat drops to 4–15 fps: rest the SPU-built
+  vertex buffers that change every frame (`PS3RECOMP_ENG_VCACHE_CHURN`), one
+  vertex stream per attribute to cut the pipeline count
+  (`PS3RECOMP_ENG_PLANAR`), recycle the shadow-target pool instead of
+  recreating it.
+- [ ] (in progress) Effects: black squares for steam/water, odd electric
+  sparks, a water-like distortion following the camera, the pause menu
+  background (GPU depth downsample: `PS3RECOMP_ENG_BLIT_GPU`, off until
+  verified), fog a little darker than on PS3.
+- [ ] Confirm saves across sessions (checkpoint, quit, Continue).
+- [ ] Lift the SPU code levels copy into variable LS addresses (a
+  relocatable lift, as inFAMOUS 2's relocatable modules).
 - [ ] The shutdown that needs a kill.
-- [ ] Play the first level through by hand, with combat; saves, audio in
-  play; the levels after it.
+- [ ] The levels after `bay area`.
 - [ ] `RES_LEVEL=<n>`: confirm whether the EBOOT honours `-level`.
 - [ ] Find out why the front end leaves port 0 disabled, and replace the
   hook with the real cause's fix.
 - [ ] A constant 30 fps through the whole game, with no hangs. As of
-  2026-10-30 the first level's gameplay runs at about 28 fps mean and 30
-  median (was 14.5), with frames of 100 ms or more down from 27 to 4 a
-  minute: shadow maps and depth downsamples stay on the GPU
-  (`PS3RECOMP_ENG_ZETA16_GPU`, `PS3RECOMP_ENG_BLIT_GPU`), attribute-major
-  vertex fetch (upstream #458, `PS3RECOMP_ENG_FETCH_MANY`), a vertex cache
-  that no longer starts over (`PS3RECOMP_ENG_VCACHE_KEEP2`), faster swizzled
-  texture decode (upstream #578), and shader translations cached across
-  sessions and builds, built in the background (`tools/play.sh`). Left:
-  GPU flush waits for colour blits, vertex-cache hashing, FIFO decode, the
-  neon-coloured surfaces seen while aiming and in later areas.
+  2026-10-30 normal gameplay holds 28–30 fps (was 14.5) and frames of 100 ms
+  or more are down from 27 to about 3 a minute; heavy combat is what is
+  left.
 - [ ] Then 60 fps: take the community's frame-rate unlock and field-of-view
   patches for BCUS98120 into `port/patches.cpp` and run the vblank clock at
   120 Hz through `g_res_vblank_hz` (already in `port/patches.cpp`), as the

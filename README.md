@@ -33,12 +33,48 @@ See [CREDITS.md](CREDITS.md).
 
 ## Status
 
-As of 2026-10-29: boot → auto-save notice → intro movies at 30 fps → title
-and menus (Campaign → New Game → difficulty) → the first level (`iceland`)
-loads → in-engine cinematic → **first-person gameplay with the HUD**, the
-player moves (a scripted 420-second run walked the objective marker from 23 m
-down to 12 m), with the full-screen image correct (no split, no border) and
-no GPU stall in a 440-second run. About 15–19 fps in play.
+As of 2026-10-30: boot → intro movies → menus → New Game → the first level
+(`iceland`) played through by hand, with combat, dialogue and checkpoints,
+into the second level (`bay area`). Normal gameplay runs at **28–30 fps**
+(was 14.5 on 2026-10-29); heavy combat can still drop lower (see known
+issues). Sessions of 70+ minutes without a hang.
+
+Since 2026-10-29:
+
+- **Neon surfaces and a world that stopped drawing:** the Metal backend kept
+  at most 4096 pipeline states, and Resistance 2 keeps creating them as a
+  level goes on (4600+ in a 15-minute session). Once the table was full,
+  every new pipeline failed and its draws were dropped for the rest of the
+  session, which left flat neon colours and missing geometry minutes into a
+  level, worse when aiming. The pipeline tables are now 65536 entries
+  (`PS3RECOMP_METAL_MAX_PIPES`, `PS3RECOMP_ENG_MAX_PIPELINES`).
+- **Frame rate, 14.5 → ~28 fps:** the RSX thread was CPU-bound (~68 ms a
+  frame; the GPU worked ~8 ms). Shadow maps and NV3089 depth downsamples
+  stay on the GPU instead of being read back every frame
+  (`PS3RECOMP_ENG_ZETA16_GPU`); attribute-major vertex fetch (upstream #458,
+  `PS3RECOMP_ENG_FETCH_MANY`); a vertex cache that no longer starts over and
+  hashes resident geometry sparsely (`PS3RECOMP_ENG_VCACHE_KEEP2`,
+  `PS3RECOMP_ENG_VCACHE_SPARSE`); faster swizzled texture decode (upstream
+  #578).
+- **Shader hitches:** 99% of a pipeline build was HLSL→MSL translation, so
+  translations are cached on disk across sessions and builds
+  (`PS3_SHADER_CACHE`), new pipelines build in the background, four at a
+  time (`PS3_SHADER_ASYNC`, `PS3_SHADER_ASYNC_JOBS`), and one whose
+  translation is already cached builds at once (`PS3_SHADER_ASYNC_SYNC_HIT`),
+  which removes the brief flash when aiming.
+- **Saves:** the game saves every checkpoint through
+  `cellSaveDataUserListAutoSave`, and the menu through `UserListSave` /
+  `UserListLoad`; none was registered, so the unresolved-NID default
+  returned OK without writing anything. They now run the game's callbacks,
+  and saves go to the HDD folder the game lists them from.
+- **HDD install:** `cellGameDataCheckCreate2` reported the game-data folder
+  as already installed, so the game never copied its caches and streamed
+  dialogue to the HDD and every dialogue line failed to open. It now reports
+  a new install until the files exist; the game copies ~354 MB on first
+  boot (`PS3_GAMEDATA_ISNEW=0/1` forces it).
+- **Linear textures with mips** keep the base pitch on every level
+  (`PS3RECOMP_TEX_LN_PITCH`); a recursion guard that halted an SPU job now
+  unwinds and resumes it.
 
 What it took, with the cause of each:
 
@@ -105,12 +141,17 @@ What it took, with the cause of each:
 
 Known issues, being worked on:
 
-- **Performance in the level (~15–19 fps):** SPU code that the level
-  copies out of its data into variable LS addresses still runs in the
-  interpreter (like inFAMOUS 2's relocatable modules: it needs a relocatable
-  lift), and shaders compile synchronously.
-- Combat, saves, audio during play, and anything past the first level are
-  untested.
+- **Heavy combat drops to 4–15 fps** for tens of seconds: SPU-built
+  geometry alternating between two buffers defeats the vertex cache (being
+  tested: `PS3RECOMP_ENG_VCACHE_CHURN`).
+- **Effects:** black squares where a steam/water effect should be, odd
+  electric sparks, a water-like distortion that follows the camera in some
+  places, and the pause menu background (a GPU-side depth downsample was
+  read as the blurred scene; `PS3RECOMP_ENG_BLIT_GPU` is off by default
+  again while that is verified).
+- The fog reads a little darker than on a PS3.
+- The SPU code levels copy into variable LS addresses still runs in the
+  interpreter (it needs a relocatable lift); it is not the frame limiter.
 
 ## How it works
 
@@ -197,8 +238,10 @@ tools/play.sh
 The game opens in a window owned by the `Resistance` launcher. Saves, the
 HDD folders and the log (`last.log`) are kept in
 `~/Library/Application Support/resistance-recomp-2/` (`RES_DATA` changes
-that). The window title shows the frame rate. Close the window, or press
-Ctrl+C in the terminal, to quit.
+that); the last 10 session logs move to `logs/`, and every log line starts
+with the seconds since launch. The window title shows the frame rate. Close
+the window, or press Ctrl+C in the terminal, to quit. The first boot copies
+~354 MB of game data to the HDD folder, as the PS3 does.
 
 ### Environment
 
@@ -218,6 +261,14 @@ Ctrl+C in the terminal, to quit.
 | `GCM_SUBCH1_M2MF=0` | subchannel 1 back to the 3D engine instead of the NV0039 copy engine |
 | `GCM_FIFO_STRADDLE=1` | opt-in guard for a FIFO walk that straddles `put` (diagnostic) |
 | `PS3RECOMP_ENG_SUBRECT=0` | turns off sub-rectangle sampling of a larger colour target (brings back the split image) |
+| `PS3_TELEMETRY=0` | turns off the per-second `[tele]` line (frames, draws) and the 3-second stall report (on in `play.sh`) |
+| `RSX_DRAIN_SPIKE_MS=<ms>` | reports every FIFO pass at least this long with what it was spent on (100 in `play.sh`) |
+| `PS3_SHADER_CACHE=<dir>` / `PS3_SHADER_ASYNC=0` | the shader translation cache (in `RES_DATA/shadercache`) / background pipeline builds (both on in `play.sh`) |
+| `PS3_SHADER_ASYNC_JOBS=<n>`, `PS3_SHADER_ASYNC_SYNC_HIT=0/1/2` | parallel background builds (4); build at once when the translation is cached (2) |
+| `PS3RECOMP_METAL_MAX_PIPES=<n>`, `PS3RECOMP_ENG_MAX_PIPELINES=<n>` | pipeline table sizes (65536; 4096/8192 bring back the neon) |
+| `PS3RECOMP_ENG_ZETA16_GPU=0`, `PS3RECOMP_ENG_FETCH_MANY=0`, `PS3RECOMP_ENG_VCACHE_SPARSE=0` | turn off the performance changes above, one at a time |
+| `PS3RECOMP_ENG_BLIT_GPU=1`, `PS3RECOMP_ENG_VCACHE_CHURN=<frames>`, `PS3RECOMP_ENG_PLANAR=1` | being tested: GPU depth downsample, resting churning vertex buffers, one vertex stream per attribute |
+| `PS3_GAMEDATA_ISNEW=0/1` | forces what the game is told about its HDD install |
 
 ### Diagnostics
 
