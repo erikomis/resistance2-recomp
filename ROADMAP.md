@@ -63,7 +63,17 @@ comes next. Same layout as the Resistance: Fall of Man roadmap.
 - [ ] `RES_LEVEL=<n>`: confirm whether the EBOOT honours `-level`.
 - [ ] Find out why the front end leaves port 0 disabled, and replace the
   hook with the real cause's fix.
-- [ ] A constant 30 fps through the whole game, with no hangs.
+- [ ] A constant 30 fps through the whole game, with no hangs. As of
+  2026-10-30 the first level's gameplay runs at about 28 fps mean and 30
+  median (was 14.5), with frames of 100 ms or more down from 27 to 4 a
+  minute: shadow maps and depth downsamples stay on the GPU
+  (`PS3RECOMP_ENG_ZETA16_GPU`, `PS3RECOMP_ENG_BLIT_GPU`), attribute-major
+  vertex fetch (upstream #458, `PS3RECOMP_ENG_FETCH_MANY`), a vertex cache
+  that no longer starts over (`PS3RECOMP_ENG_VCACHE_KEEP2`), faster swizzled
+  texture decode (upstream #578), and shader translations cached across
+  sessions and builds, built in the background (`tools/play.sh`). Left:
+  GPU flush waits for colour blits, vertex-cache hashing, FIFO decode, the
+  neon-coloured surfaces seen while aiming and in later areas.
 - [ ] Then 60 fps: take the community's frame-rate unlock and field-of-view
   patches for BCUS98120 into `port/patches.cpp` and run the vblank clock at
   120 Hz through `g_res_vblank_hz` (already in `port/patches.cpp`), as the

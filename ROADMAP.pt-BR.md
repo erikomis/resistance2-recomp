@@ -68,7 +68,18 @@ vem a seguir. Mesma organização do roadmap do Resistance: Fall of Man.
 - [ ] `RES_LEVEL=<n>`: confirmar se o EBOOT aceita `-level`.
 - [ ] Descobrir por que o front end deixa o port 0 desabilitado e trocar o
   hook pela correção da causa real.
-- [ ] 30 fps constantes no jogo todo, sem travamentos.
+- [ ] 30 fps constantes no jogo todo, sem travamentos. Em 30/10/2026 a
+  gameplay da primeira fase roda a cerca de 28 fps de média e 30 de mediana
+  (eram 14,5), e os quadros de 100 ms ou mais caíram de 27 para 4 por minuto:
+  mapas de sombra e reduções de profundidade ficam na GPU
+  (`PS3RECOMP_ENG_ZETA16_GPU`, `PS3RECOMP_ENG_BLIT_GPU`), leitura de vértices
+  por atributo (upstream #458, `PS3RECOMP_ENG_FETCH_MANY`), cache de vértices
+  que não recomeça mais (`PS3RECOMP_ENG_VCACHE_KEEP2`), decodificação de
+  texturas swizzled mais rápida (upstream #578) e traduções de shader em cache
+  entre sessões e builds, compiladas em segundo plano (`tools/play.sh`).
+  Falta: esperas da GPU em cópias de cor, hash do cache de vértices,
+  decodificação do FIFO, as superfícies em cores neon ao mirar e em áreas
+  mais adiante.
 - [ ] Depois, 60 fps: trazer os patches da comunidade de destrave de quadros
   e campo de visão do BCUS98120 para o `port/patches.cpp` e rodar o relógio de
   vblank a 120 Hz com `g_res_vblank_hz` (que já existe no `port/patches.cpp`),

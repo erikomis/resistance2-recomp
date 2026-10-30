@@ -110,6 +110,10 @@ void     cellGcmTickFlip(void);
 int      cellGcm_take_flip_pending(void);
 void     cellGcm_rsx_process_fifo(void);      /* drain get -> put */
 unsigned cellGcm_flip_request_count(void);
+
+/* PS3_TELEMETRY: draws in the last frame, and every guest thread's lr. */
+uint32_t rsx_draw_engine_guest_draws(void);
+void     ppu_report_guest_lrs(void);
 }
 
 /* ---------------------------------------------------------------------------
@@ -227,6 +231,16 @@ static DWORD WINAPI frame_clock(LPVOID)
     }
     ULONGLONG next_tick = GetTickCount64() * 1000;   /* us */
     ULONGLONG last_pump = 0;
+    /* PS3_TELEMETRY=1 (jogar.sh turns it on): one cheap line a second with
+     * the guest frames and the draws in the last frame -- a scene that keeps
+     * flipping with almost no draws is a world that stopped rendering -- and,
+     * once per stall, where every guest thread is when no frame has come for
+     * 3 s, so a freeze in a player's session explains itself in the log. */
+    const char* tele_env = getenv("PS3_TELEMETRY");
+    const bool telemetry = tele_env && tele_env[0] == '1';
+    ULONGLONG tele_time = GetTickCount64(), tele_last_flip_time = tele_time;
+    uint32_t tele_flips = cellGcm_flip_request_count();
+    bool tele_stalled = false;
     const char* stats_env = getenv("PS3RECOMP_FRAME_STATS");
     const bool frame_stats = stats_env && stats_env[0] == '1';
     ULONGLONG stats_time = GetTickCount64();
@@ -247,6 +261,24 @@ static DWORD WINAPI frame_clock(LPVOID)
                     (now - stats_start) / 1000.0,
                     (flips - stats_flips) * 1000.0 / (now - stats_time), flips);
             stats_time = now; stats_flips = flips;
+        }
+        if (telemetry && now - tele_time >= 1000) {
+            const uint32_t flips = cellGcm_flip_request_count();
+            if (flips != tele_flips) {
+                if (tele_stalled)
+                    fprintf(stderr, "[tele] frames resumed after %.1f s without one\n",
+                            (now - tele_last_flip_time) / 1000.0);
+                tele_stalled = false;
+                tele_last_flip_time = now;
+            } else if (!tele_stalled && now - tele_last_flip_time >= 3000) {
+                tele_stalled = true;
+                fprintf(stderr, "[tele] FREEZE: no guest frame for %.1f s; guest threads:\n",
+                        (now - tele_last_flip_time) / 1000.0);
+                ppu_report_guest_lrs();
+            }
+            fprintf(stderr, "[tele] frames=%u draws=%u\n", flips - tele_flips,
+                    rsx_draw_engine_guest_draws());
+            tele_time = now; tele_flips = flips;
         }
 
         int fired = 0;
