@@ -75,6 +75,22 @@ Since 2026-10-29:
 - **Linear textures with mips** keep the base pitch on every level
   (`PS3RECOMP_TEX_LN_PITCH`); a recursion guard that halted an SPU job now
   unwinds and resumes it.
+- **Pause menu background and CPU-side copies:** the Metal backend never
+  implemented writing guest bytes into a colour target, so an NV3089 copy
+  the CPU path performs into memory the GPU holds as a surface was lost. At
+  pause the game copies the scene into the depth buffer's memory and blurs
+  it back every frame; the menu showed depth read as colour (neon blobs) or
+  a flat cream background. Those writes now reach the GPU target
+  (`PS3RECOMP_ENG_GUEST_WRITE`), and the GPU depth downsample is back on
+  (`PS3RECOMP_ENG_BLIT_GPU`).
+- **Heavy combat:** SPU-built geometry lands at new addresses every frame
+  and each piece is drawn about twice; the second draw now reuses the
+  vertices decoded for the first (`PS3RECOMP_ENG_VCACHE_FRAMEREUSE`), which
+  cut frames over 100 ms from 9 to 5 a minute in a probe.
+- **Shaders sampling a volume texture in texel coordinates** were cut to
+  two components and failed to compile (2400 failures in one session's
+  Moonpool area, every such draw dropped); they are scaled as volumes under
+  `PS3RECOMP_FP_UNNORM_VOL=1` (on in `play.sh`, being confirmed in play).
 
 What it took, with the cause of each:
 
@@ -141,14 +157,12 @@ What it took, with the cause of each:
 
 Known issues, being worked on:
 
-- **Heavy combat drops to 4–15 fps** for tens of seconds: SPU-built
-  geometry alternating between two buffers defeats the vertex cache (being
-  tested: `PS3RECOMP_ENG_VCACHE_CHURN`).
-- **Effects:** black squares where a steam/water effect should be, odd
-  electric sparks, a water-like distortion that follows the camera in some
-  places, and the pause menu background (a GPU-side depth downsample was
-  read as the blurred scene; `PS3RECOMP_ENG_BLIT_GPU` is off by default
-  again while that is verified).
+- **Heavy combat** can still drop below 30 fps: SPU-built geometry at new
+  addresses every frame misses the vertex cache (same-frame reuse above
+  halves the decode; more to do).
+- **Effects** to confirm in play after the fixes above: black squares where
+  a steam/water effect should be, odd electric sparks, a water-like
+  distortion that follows the camera in some places (Moonpool area).
 - The fog reads a little darker than on a PS3.
 - The SPU code levels copy into variable LS addresses still runs in the
   interpreter (it needs a relocatable lift); it is not the frame limiter.
@@ -267,7 +281,10 @@ the window, or press Ctrl+C in the terminal, to quit. The first boot copies
 | `PS3_SHADER_ASYNC_JOBS=<n>`, `PS3_SHADER_ASYNC_SYNC_HIT=0/1/2` | parallel background builds (4); build at once when the translation is cached (2) |
 | `PS3RECOMP_METAL_MAX_PIPES=<n>`, `PS3RECOMP_ENG_MAX_PIPELINES=<n>` | pipeline table sizes (65536; 4096/8192 bring back the neon) |
 | `PS3RECOMP_ENG_ZETA16_GPU=0`, `PS3RECOMP_ENG_FETCH_MANY=0`, `PS3RECOMP_ENG_VCACHE_SPARSE=0` | turn off the performance changes above, one at a time |
-| `PS3RECOMP_ENG_BLIT_GPU=1`, `PS3RECOMP_ENG_VCACHE_CHURN=<frames>`, `PS3RECOMP_ENG_PLANAR=1` | being tested: GPU depth downsample, resting churning vertex buffers, one vertex stream per attribute |
+| `PS3RECOMP_ENG_BLIT_GPU=0`, `PS3RECOMP_ENG_GUEST_WRITE=0` | GPU depth downsample / CPU-side writes into GPU targets off (both on by default; off brings back the broken pause menu) |
+| `PS3RECOMP_ENG_VCACHE_FRAMEREUSE=0`, `PS3RECOMP_ENG_VCACHE_CHURN=0` | same-frame vertex reuse / resting vertex buffers that keep changing, off (both on by default) |
+| `PS3RECOMP_FP_UNNORM_VOL=0/1` | volume textures in texel coordinates scaled as volumes (on in `play.sh`) |
+| `PS3RECOMP_ENG_PLANAR=1`, `PS3RECOMP_METAL_TARGET_POOL=1` | measured and rejected (slower): one vertex stream per attribute, a recycled shadow-target pool |
 | `PS3_GAMEDATA_ISNEW=0/1` | forces what the game is told about its HDD install |
 
 ### Diagnostics

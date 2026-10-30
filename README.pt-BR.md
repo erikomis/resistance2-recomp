@@ -76,6 +76,25 @@ Desde 29/10/2026:
 - **Texturas lineares com mips** mantêm o pitch da base em todos os níveis
   (`PS3RECOMP_TEX_LN_PITCH`); uma proteção de recursão que parava um job do
   SPU agora desempilha e retoma.
+- **Fundo do menu de pausa e cópias feitas pela CPU:** o backend Metal
+  nunca implementou gravar bytes do guest num alvo de cor, então uma cópia
+  NV3089 feita pelo caminho da CPU numa memória que a GPU usa como
+  superfície se perdia. Na pausa o jogo copia a cena para a memória do
+  buffer de profundidade e a desfoca de volta a cada quadro; o menu mostrava
+  a profundidade lida como cor (manchas neon) ou um fundo creme liso. Essas
+  gravações agora chegam ao alvo na GPU (`PS3RECOMP_ENG_GUEST_WRITE`), e a
+  redução de profundidade na GPU voltou a ficar ligada
+  (`PS3RECOMP_ENG_BLIT_GPU`).
+- **Combate pesado:** a geometria que os SPUs montam cai em endereços novos
+  a cada quadro e cada pedaço é desenhado umas duas vezes; o segundo desenho
+  agora reaproveita os vértices convertidos no primeiro
+  (`PS3RECOMP_ENG_VCACHE_FRAMEREUSE`), o que baixou os quadros acima de
+  100 ms de 9 para 5 por minuto num teste.
+- **Shaders que amostram textura de volume em coordenadas de texel** tinham
+  a coordenada cortada para dois componentes e não compilavam (2400 falhas
+  na área Moonpool de uma sessão, com todos esses desenhos descartados);
+  passam a ser escalados como volume com `PS3RECOMP_FP_UNNORM_VOL=1` (ligado
+  no `play.sh`, sendo confirmado jogando).
 
 O que foi preciso, com a causa de cada um:
 
@@ -146,14 +165,13 @@ O que foi preciso, com a causa de cada um:
 
 Problemas conhecidos, em andamento:
 
-- **Combate pesado cai para 4–15 fps** por dezenas de segundos: a geometria
-  que o SPU monta alternando entre dois buffers derrota o cache de vértices
-  (em teste: `PS3RECOMP_ENG_VCACHE_CHURN`).
-- **Efeitos:** quadrados pretos onde deveria haver vapor/água, faíscas
-  elétricas estranhas, uma distorção como água que acompanha a câmera em
-  alguns lugares, e o fundo do menu de pausa (uma redução de profundidade
-  feita na GPU era lida como a cena desfocada; `PS3RECOMP_ENG_BLIT_GPU`
-  voltou a vir desligado enquanto isso é verificado).
+- **Combate pesado** ainda pode cair abaixo de 30 fps: a geometria dos SPUs
+  em endereços novos a cada quadro erra o cache de vértices (o
+  reaproveitamento no mesmo quadro, acima, corta metade da conversão; falta
+  mais).
+- **Efeitos** a confirmar jogando depois das correções acima: quadrados
+  pretos no lugar de vapor/água, faíscas elétricas estranhas, uma distorção
+  como água que acompanha a câmera em alguns lugares (área Moonpool).
 - A neblina sai um pouco mais escura que no PS3.
 - O código SPU que as fases copiam para endereços variáveis do LS ainda
   roda no interpretador (precisa de uma tradução relocável); não é ele que
@@ -277,7 +295,10 @@ PS3.
 | `PS3_SHADER_ASYNC_JOBS=<n>`, `PS3_SHADER_ASYNC_SYNC_HIT=0/1/2` | compilações paralelas em segundo plano (4); compilar na hora quando a tradução está em cache (2) |
 | `PS3RECOMP_METAL_MAX_PIPES=<n>`, `PS3RECOMP_ENG_MAX_PIPELINES=<n>` | tamanho das tabelas de pipeline (65536; 4096/8192 trazem o neon de volta) |
 | `PS3RECOMP_ENG_ZETA16_GPU=0`, `PS3RECOMP_ENG_FETCH_MANY=0`, `PS3RECOMP_ENG_VCACHE_SPARSE=0` | desligam as mudanças de desempenho acima, uma de cada vez |
-| `PS3RECOMP_ENG_BLIT_GPU=1`, `PS3RECOMP_ENG_VCACHE_CHURN=<quadros>`, `PS3RECOMP_ENG_PLANAR=1` | em teste: redução de profundidade na GPU, deixar de conferir buffers de vértice que mudam todo quadro, um fluxo de vértices por atributo |
+| `PS3RECOMP_ENG_BLIT_GPU=0`, `PS3RECOMP_ENG_GUEST_WRITE=0` | desligam a redução de profundidade na GPU / as gravações da CPU em alvos da GPU (ligadas por padrão; desligar traz de volta o menu de pausa quebrado) |
+| `PS3RECOMP_ENG_VCACHE_FRAMEREUSE=0`, `PS3RECOMP_ENG_VCACHE_CHURN=0` | desligam o reaproveitamento de vértices no mesmo quadro / o descanso de buffers que mudam sempre (ligados por padrão) |
+| `PS3RECOMP_FP_UNNORM_VOL=0/1` | texturas de volume em coordenadas de texel escaladas como volume (ligado no `play.sh`) |
+| `PS3RECOMP_ENG_PLANAR=1`, `PS3RECOMP_METAL_TARGET_POOL=1` | medidos e descartados (mais lentos): um fluxo de vértices por atributo, um pool reaproveitado de alvos de sombra |
 | `PS3_GAMEDATA_ISNEW=0/1` | força o que o jogo ouve sobre a instalação no HDD |
 
 ### Diagnóstico

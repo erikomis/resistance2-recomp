@@ -67,18 +67,21 @@ comes next. Same layout as the Resistance: Fall of Man roadmap.
   boot (`cellGameDataCheckCreate2` reports a new install).
 - [x] Session logs: timestamped lines, the last 10 kept, a per-second
   telemetry line, a 3-second stall report and long-pass breakdowns.
+- [x] Pause menu background: CPU-side NV3089 copies into GPU targets now
+  reach the GPU (`PS3RECOMP_ENG_GUEST_WRITE`); GPU depth downsample back on.
+- [x] Same-frame vertex reuse for SPU-built geometry drawn twice
+  (`PS3RECOMP_ENG_VCACHE_FRAMEREUSE`).
+- [x] Measured and rejected: one vertex stream per attribute
+  (`PS3RECOMP_ENG_PLANAR`), a recycled shadow-target pool.
 
 ## Next
 
-- [ ] (in progress) Heavy combat drops to 4–15 fps: rest the SPU-built
-  vertex buffers that change every frame (`PS3RECOMP_ENG_VCACHE_CHURN`), one
-  vertex stream per attribute to cut the pipeline count
-  (`PS3RECOMP_ENG_PLANAR`), recycle the shadow-target pool instead of
-  recreating it.
-- [ ] (in progress) Effects: black squares for steam/water, odd electric
-  sparks, a water-like distortion following the camera, the pause menu
-  background (GPU depth downsample: `PS3RECOMP_ENG_BLIT_GPU`, off until
-  verified), fog a little darker than on PS3.
+- [ ] (in progress) Heavy combat below 30 fps: SPU-built geometry at new
+  addresses every frame misses the vertex cache.
+- [ ] (in progress) Confirm in play: the Moonpool effects (black squares for
+  steam/water, odd sparks, a water-like distortion following the camera)
+  after `PS3RECOMP_FP_UNNORM_VOL` and `PS3RECOMP_ENG_GUEST_WRITE`; fog a
+  little darker than on PS3.
 - [ ] Confirm saves across sessions (checkpoint, quit, Continue).
 - [ ] Lift the SPU code levels copy into variable LS addresses (a
   relocatable lift, as inFAMOUS 2's relocatable modules).

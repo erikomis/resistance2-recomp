@@ -74,19 +74,22 @@ vem a seguir. Mesma organização do roadmap do Resistance: Fall of Man.
 - [x] Logs das sessões: linhas com tempo, as 10 últimas guardadas, uma linha
   de telemetria por segundo, relatório de travada de 3 s e detalhe das
   passadas longas.
+- [x] Fundo do menu de pausa: cópias NV3089 feitas pela CPU em alvos da GPU
+  agora chegam à GPU (`PS3RECOMP_ENG_GUEST_WRITE`); redução de profundidade
+  na GPU religada.
+- [x] Reaproveitamento de vértices no mesmo quadro para a geometria dos SPUs
+  desenhada duas vezes (`PS3RECOMP_ENG_VCACHE_FRAMEREUSE`).
+- [x] Medidos e descartados: um fluxo de vértices por atributo
+  (`PS3RECOMP_ENG_PLANAR`), um pool reaproveitado de alvos de sombra.
 
 ## Próximos passos
 
-- [ ] (em andamento) Combate pesado cai para 4–15 fps: parar de conferir os
-  buffers de vértice que o SPU refaz a cada quadro
-  (`PS3RECOMP_ENG_VCACHE_CHURN`), um fluxo de vértices por atributo para
-  cortar o número de pipelines (`PS3RECOMP_ENG_PLANAR`), reaproveitar os
-  alvos de sombra em vez de recriá-los.
-- [ ] (em andamento) Efeitos: quadrados pretos no lugar de vapor/água,
-  faíscas elétricas estranhas, uma distorção como água acompanhando a
-  câmera, o fundo do menu de pausa (redução de profundidade na GPU:
-  `PS3RECOMP_ENG_BLIT_GPU`, desligada até ser verificada), neblina um pouco
-  mais escura que no PS3.
+- [ ] (em andamento) Combate pesado abaixo de 30 fps: a geometria dos SPUs
+  em endereços novos a cada quadro erra o cache de vértices.
+- [ ] (em andamento) Confirmar jogando: os efeitos da Moonpool (quadrados
+  pretos no lugar de vapor/água, faíscas estranhas, distorção como água
+  acompanhando a câmera) depois de `PS3RECOMP_FP_UNNORM_VOL` e
+  `PS3RECOMP_ENG_GUEST_WRITE`; neblina um pouco mais escura que no PS3.
 - [ ] Confirmar os saves entre sessões (checkpoint, sair, Continuar).
 - [ ] Traduzir o código SPU que as fases copiam para endereços variáveis do
   LS (uma tradução relocável, como os módulos relocáveis do inFAMOUS 2).

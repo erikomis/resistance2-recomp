@@ -55,14 +55,14 @@ echo "Log: $LOG"
 #   PS3_SHADER_ASYNC    new shaders built in the background: a new object may
 #                       be missing for a frame or two instead of the frame
 #                       stalling for 30-500 ms
-#   PS3RECOMP_ENG_VCACHE_CHURN  vertex buffers the SPUs rebuild every frame are
-#                       fetched directly instead of re-hashed (being tested)
+#   PS3RECOMP_FP_UNNORM_VOL  volume textures sampled in texel coordinates are
+#                       scaled as volumes (Moonpool effects; being confirmed)
 unset PS3RECOMP_METAL_HEADLESS
 PS3_HDD0_ROOT=$RES_DATA/dev_hdd0 PS3_HDD1_ROOT=$RES_DATA/dev_hdd1 \
 PS3RECOMP_METAL_FPS=1 PS3_PAD_LOG=${PS3_PAD_LOG:-1} \
 PS3_TELEMETRY=${PS3_TELEMETRY:-1} RSX_DRAIN_SPIKE_MS=${RSX_DRAIN_SPIKE_MS:-100} \
 PS3RECOMP_ENG_VCACHE_STATS=${PS3RECOMP_ENG_VCACHE_STATS:-1} \
-PS3RECOMP_ENG_VCACHE_CHURN=${PS3RECOMP_ENG_VCACHE_CHURN:-60} \
+PS3RECOMP_FP_UNNORM_VOL=${PS3RECOMP_FP_UNNORM_VOL:-1} \
 PS3_SHADER_CACHE=${PS3_SHADER_CACHE:-$RES_DATA/shadercache} PS3_SHADER_ASYNC=${PS3_SHADER_ASYNC:-1} \
     caffeinate -i "$L" "$B" "$E" > "$LOG.raw" 2>&1 &
 game=$!
