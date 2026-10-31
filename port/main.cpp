@@ -190,13 +190,154 @@ extern "C" unsigned ppu_boot_frames_presented(void)
     return (unsigned)g_frames_presented;
 }
 
+/* The window is closed and the process is ending (PS3_CLEAN_EXIT): the frame
+ * clock keeps draining the FIFO and taking flips, but nothing is presented. */
+static bool win_gone = false;
+
 static void present_guest_frame(void)
 {
-    rsx_backend_present();
+    if (!win_gone) rsx_backend_present();
     /* This thread increments and guest threads read, so interlocked rather
      * than a volatile ++, which on arm64 is neither atomic nor a fence. */
     InterlockedIncrement(&g_frames_presented);
 }
+
+/* ---------------------------------------------------------------------------
+ * Quitting: window closed, SIGTERM, SIGINT, SIGHUP
+ * -----------------------------------------------------------------------*/
+/* The launcher (tools/host_window) closes its window by setting `closed` in
+ * the control page and sending SIGTERM, and kills the game 3 s later if it is
+ * still there. It always was: SDL (cellPad's game-controller init, cellAudio's
+ * audio init) installs its own SIGINT/SIGTERM handlers whenever they are at
+ * SIG_DFL, and those only post an SDL_QUIT event that nothing here reads, so
+ * the signal did nothing. The window closing only stopped the frame clock's
+ * FIFO drain, so the guest spun on its RSX fence ("GPU sit and spin timeout")
+ * until the SIGKILL. Every session ended that way, with the stdout buffer
+ * (the [cellFs]/[cellSaveData]/... printf lines) lost.
+ *
+ * PS3_CLEAN_EXIT (default 1; =0 restores the old behaviour): the handlers are installed here first (and SDL is told to
+ * keep out), and a close, from the window or from a signal, ends the process
+ * at once: wait for a save in progress (cellSaveData, at most 2 s), flush the
+ * logs, _exit(0). exit() would run the C++ static destructors and the Metal
+ * and SDL teardown under guest threads that are still running.
+ *
+ * PS3_EXIT_REQUEST_MS=<ms> (default 0, off): first deliver
+ * CELL_SYSUTIL_REQUEST_EXITGAME to the title's sysutil callbacks, as the XMB's
+ * "Quit Game" does, keep the RSX running, and give it that long to call
+ * sys_process_exit itself before the process is ended anyway. */
+#ifndef PS3_CLEAN_EXIT_DEFAULT
+#define PS3_CLEAN_EXIT_DEFAULT 1
+#endif
+#ifndef _WIN32
+#include <signal.h>
+#include <unistd.h>
+#include <time.h>
+extern "C" void cellSysutilQueueEvent(int slot, uint32_t status, uint32_t param);
+extern "C" int  cellSaveData_busy(void);
+static int g_clean_exit = -1;            /* resolved in quit_install() */
+static int g_quit_pipe[2] = { -1, -1 };
+static volatile int g_quit_started = 0;
+
+static bool clean_exit_on(void)
+{
+    if (g_clean_exit < 0) {
+        const char* e = getenv("PS3_CLEAN_EXIT");
+        g_clean_exit = e && *e ? (e[0] != '0') : PS3_CLEAN_EXIT_DEFAULT;
+    }
+    return g_clean_exit != 0;
+}
+
+static void quit_sleep_ms(int ms)
+{
+    struct timespec ts = { ms / 1000, (long)(ms % 1000) * 1000000L };
+    nanosleep(&ts, nullptr);
+}
+
+/* Runs once, on the quit thread. Never returns. */
+static void quit_now(const char* why)
+{
+    fprintf(stderr, "[boot] quit (%s)\n", why);
+    const char* req = getenv("PS3_EXIT_REQUEST_MS");
+    const int req_ms = req ? atoi(req) : 0;
+    if (req_ms > 0) {
+        /* 0x0101 = CELL_SYSUTIL_REQUEST_EXITGAME; slots the title never
+         * registered are skipped by cellSysutilCheckCallback. */
+        for (int slot = 0; slot < 4; slot++) cellSysutilQueueEvent(slot, 0x0101, 0);
+        fprintf(stderr, "[boot] quit: REQUEST_EXITGAME sent; %d ms for the title to exit\n", req_ms);
+        for (int t = 0; t < req_ms; t += 10) quit_sleep_ms(10);
+        fprintf(stderr, "[boot] quit: the title did not exit in %d ms\n", req_ms);
+    }
+    int waited = 0;
+    while (cellSaveData_busy() && waited < 2000) { quit_sleep_ms(10); waited += 10; }
+    if (waited)
+        fprintf(stderr, "[boot] quit: waited %d ms for a save in progress%s\n", waited,
+                cellSaveData_busy() ? " (still busy)" : "");
+    fflush(stdout);
+    fflush(stderr);
+    _exit(0);
+}
+
+static void* quit_thread(void*)
+{
+    for (;;) {
+        unsigned char c = 0;
+        const ssize_t n = read(g_quit_pipe[0], &c, 1);
+        if (n == 1) {
+            const char* why = c == SIGTERM ? "SIGTERM" : c == SIGINT ? "SIGINT"
+                            : c == SIGHUP ? "SIGHUP" : "window closed";
+            quit_now(why);
+        }
+        if (n == 0) return nullptr;
+    }
+}
+
+static void quit_signal(int sig)
+{
+    const unsigned char c = (unsigned char)sig;
+    const ssize_t r = write(g_quit_pipe[1], &c, 1);   /* async-signal-safe */
+    (void)r;
+}
+
+/* From the frame clock: the window is gone. */
+static void quit_request_window_closed(void)
+{
+    if (g_quit_started) return;
+    g_quit_started = 1;
+    const unsigned char c = 0;
+    const ssize_t r = write(g_quit_pipe[1], &c, 1);
+    (void)r;
+}
+
+/* Before anything initialises SDL. */
+static void quit_install(void)
+{
+    if (!clean_exit_on()) return;
+    if (pipe(g_quit_pipe) != 0) { g_clean_exit = 0; return; }
+    setenv("SDL_NO_SIGNAL_HANDLERS", "1", 0);
+    pthread_t th;
+    pthread_attr_t attr;
+    pthread_attr_init(&attr);
+    pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
+    if (pthread_create(&th, &attr, quit_thread, nullptr) != 0) {
+        pthread_attr_destroy(&attr);
+        g_clean_exit = 0;
+        return;
+    }
+    pthread_attr_destroy(&attr);
+    struct sigaction sa;
+    memset(&sa, 0, sizeof sa);
+    sa.sa_handler = quit_signal;
+    sigemptyset(&sa.sa_mask);
+    sa.sa_flags = SA_RESTART;
+    sigaction(SIGTERM, &sa, nullptr);
+    sigaction(SIGINT, &sa, nullptr);
+    sigaction(SIGHUP, &sa, nullptr);
+}
+#else
+static bool clean_exit_on(void) { return false; }
+static void quit_request_window_closed(void) {}
+static void quit_install(void) {}
+#endif
 
 static DWORD WINAPI frame_clock(LPVOID)
 {
@@ -314,11 +455,21 @@ static DWORD WINAPI frame_clock(LPVOID)
              * a windowed pump is a dispatch_sync to the main thread, and this
              * loop now runs every 1 ms. */
             const int pump_due = now - last_pump >= 4 || now < last_pump;
-            if (pump_due) {
+            if (pump_due && !win_gone) {
                 last_pump = now;
                 if (rsx_backend_pump() != 0) {
-                    rsx_ok = 0;              /* window closed */
-                    continue;
+                    /* Window closed. With PS3_CLEAN_EXIT the process ends
+                     * (quit_now); until then the FIFO keeps draining, so a
+                     * title asked to exit (PS3_EXIT_REQUEST_MS) is not left
+                     * spinning on its RSX fence. Presents into a closed
+                     * window are skipped by the backend. */
+                    if (clean_exit_on()) {
+                        win_gone = true;
+                        quit_request_window_closed();
+                    } else {
+                        rsx_ok = 0;
+                        continue;
+                    }
                 }
             }
             /* Present a flip the drain just reached, now: the drain stops at
@@ -330,7 +481,7 @@ static DWORD WINAPI frame_clock(LPVOID)
              * pump's cadence, so the window is not blank during boot. */
             if (cellGcm_take_flip_pending())
                 present_guest_frame();
-            else if (pump_due && cellGcm_flip_request_count() == 0)
+            else if (pump_due && !win_gone && cellGcm_flip_request_count() == 0)
                 rsx_backend_present();
         }
     }
@@ -465,6 +616,11 @@ int main(int argc, char** argv)
         if (!s) setenv("PS3_LWCOND_EVENTS", "1", 1);
 #endif
     }
+
+    /* SIGTERM/SIGINT/SIGHUP and the window closing end the process
+     * (PS3_CLEAN_EXIT). First, before the backend or anything else can
+     * initialise SDL and take the signals over. */
+    quit_install();
 
     const char* title = getenv("PS3_TITLE");
     if (!title || !*title) title = "Resistance 2";
