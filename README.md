@@ -242,6 +242,10 @@ through `PS3_VFS_ROOT`, `game/BCUS98120/PS3_GAME`, or a volume under
 
 ## Playing
 
+The easiest way is the launcher in [`launcher/`](launcher/README.md): it
+installs and rebuilds the port from your disc, keeps the settings and saves,
+and plays the game without a terminal. From a terminal:
+
 Mount your disc image (or keep it extracted in `game/BCUS98120/`), connect a
 controller (DualSense, DualShock or Xbox), then:
 

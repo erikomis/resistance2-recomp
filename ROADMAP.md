@@ -98,7 +98,10 @@ comes next. Same layout as the Resistance: Fall of Man roadmap.
   patches for BCUS98120 into `port/patches.cpp` and run the vblank clock at
   120 Hz through `g_res_vblank_hz` (already in `port/patches.cpp`), as the
   Resistance: Fall of Man port does with `RES_UNLOCK_FPS=1`.
-- [ ] The desktop launcher, once the game is playable.
+- [x] The desktop launcher (`launcher/`, adapted from the Resistance: Fall of
+  Man port's), with a one-click install and decryption without RPCS3.
+- [ ] Test the one-click install end to end on a clean Mac; a release build
+  of the launcher.
 - [ ] Send the generic toolkit fixes upstream (per-instance workload tables,
   the lost-wake fix, overlay retirement, `ESRCH`, NV0039, the FIFO `put`
   re-read, sub-rectangle sampling).

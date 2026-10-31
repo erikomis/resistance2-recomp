@@ -255,6 +255,10 @@ achado pelo `PS3_VFS_ROOT`, por `game/BCUS98120/PS3_GAME` ou por um volume em
 
 ## Jogando
 
+O jeito mais fácil é o launcher em [`launcher/`](launcher/README.md): ele
+instala e recompila o port a partir do seu disco, guarda as configurações e
+os saves e abre o jogo sem terminal. Pelo terminal:
+
 Monte a imagem do disco (ou deixe-o extraído em `game/BCUS98120/`), conecte
 um controle (DualSense, DualShock ou Xbox) e rode:
 
