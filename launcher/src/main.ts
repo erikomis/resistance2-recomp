@@ -643,7 +643,7 @@ const DEFAULTS: Partial<Settings> = {
   shaderCache: true,
   shaderAsync: true,
   shaderAsyncJobs: 4,
-  shaderSyncHit: 2,
+  shaderSyncHit: 1,
   frameClockUs: 50,
   padLog: true,
   telemetry: true,

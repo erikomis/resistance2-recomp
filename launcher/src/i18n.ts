@@ -259,9 +259,9 @@ const en = {
   "settings.shaderJobsDefault": "4 (default)",
   "settings.shaderSyncHit": "Shaders already translated",
   "settings.shaderSyncHitHint":
-    "A pipeline whose translation is already cached builds at once (0.1-0.6 ms) instead of waiting in the queue (PS3_SHADER_ASYNC_SYNC_HIT): no brief flash of a missing object when aiming.",
-  "settings.syncHit2": "At once, from the disk cache (default)",
-  "settings.syncHit1": "At once, only those in memory",
+    "A pipeline whose shaders are already in memory builds at once (under 1 ms) instead of waiting in the queue (PS3_SHADER_ASYNC_SYNC_HIT). Also building from the disk cache runs the shader compiler on the video thread: it can freeze the game for seconds when a new area loads.",
+  "settings.syncHit2": "At once, also from the disk cache",
+  "settings.syncHit1": "At once, only those in memory (default)",
   "settings.syncHit0": "Always in the background",
   "settings.frameClock": "Frame clock",
   "settings.frameClockHint":
@@ -948,9 +948,9 @@ const ptBR: Partial<Record<Key, string>> = {
   "settings.shaderJobsDefault": "4 (padrão)",
   "settings.shaderSyncHit": "Shaders já traduzidos",
   "settings.shaderSyncHitHint":
-    "Um pipeline cuja tradução já está no cache é montado na hora (0,1-0,6 ms) em vez de esperar na fila (PS3_SHADER_ASYNC_SYNC_HIT): sem o piscar de um objeto faltando ao mirar.",
-  "settings.syncHit2": "Na hora, do cache em disco (padrão)",
-  "settings.syncHit1": "Na hora, só os da memória",
+    "Um pipeline cujos shaders já estão na memória é montado na hora (menos de 1 ms), sem esperar na fila (PS3_SHADER_ASYNC_SYNC_HIT). Montar também a partir do cache em disco roda o compilador de shaders na thread de vídeo: pode travar o jogo por segundos ao entrar numa área nova.",
+  "settings.syncHit2": "Na hora, também do cache em disco",
+  "settings.syncHit1": "Na hora, só os da memória (padrão)",
   "settings.syncHit0": "Sempre em segundo plano",
   "settings.frameClock": "Relógio de quadros",
   "settings.frameClockHint":
