@@ -94,6 +94,14 @@ Since 2026-10-29:
 
 Since 2026-10-31:
 
+- **Continue Game and Load Level:** saves were written but never read back.
+  `cellSaveDataUserListAutoLoad` was not registered, and the fallback that
+  answered it ran only the first callback, so `GAME.SAV` was never loaded,
+  the Campaign menu offered only New Game and Cinematics, and every session
+  started over. It now runs the whole fixed-load path
+  (`RES_SAVEDATA_LOAD`, `=0` restores the old fallback): the menu offers
+  Continue Game, New Game, Load Level and Cinematics, and Continue lands at
+  the last checkpoint.
 - **Aiming:** for a few frames after pressing aim, the sky and far
   background turned white with magenta and green noise bands. The aim
   transition copies the scene at half size through the CPU-path NV3089 into
@@ -330,6 +338,7 @@ the window, or press Ctrl+C in the terminal, to quit. The first boot copies
 | `PS3RECOMP_ENG_GUEST_OVER=0`, `PS3_RSX_AUTORELEASE=0`, `PS3RECOMP_ENG_BLIT_GPU_COLOR=0` | turn off the aim fix, the autorelease pool, GPU scene copies |
 | `PS3_AUDIO_OUT_STEREO=0`, `PS3_AUDIO_LIMITER=0`, `PS3_SPU_INTERP_FAST=0` | offer 5.1 again, no peak limiter, the old interpreter loop |
 | `PS3_RELOCMODS=1` | run the lifted position-independent SPU modules (being tested) |
+| `RES_SAVEDATA_LOAD=0` | the save is no longer read back at boot (no Continue Game) |
 | `PS3RECOMP_METAL_MAX_PIPES=<n>`, `PS3RECOMP_ENG_MAX_PIPELINES=<n>` | pipeline table sizes (65536; 4096/8192 bring back the neon) |
 | `PS3RECOMP_ENG_ZETA16_GPU=0`, `PS3RECOMP_ENG_FETCH_MANY=0`, `PS3RECOMP_ENG_VCACHE_SPARSE=0` | turn off the performance changes above, one at a time |
 | `PS3RECOMP_ENG_BLIT_GPU=0`, `PS3RECOMP_ENG_GUEST_WRITE=0` | GPU depth downsample / CPU-side writes into GPU targets off (both on by default; off brings back the broken pause menu) |

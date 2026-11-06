@@ -98,6 +98,14 @@ Desde 29/10/2026:
 
 Desde 31/10/2026:
 
+- **Continue Game e Load Level:** os saves eram gravados mas nunca lidos de
+  volta. `cellSaveDataUserListAutoLoad` não estava registrada, e o código
+  provisório que a atendia só rodava o primeiro callback, então o `GAME.SAV`
+  nunca era carregado, o menu Campaign só oferecia New Game e Cinematics e
+  toda sessão começava do zero. Agora ela roda o carregamento completo
+  (`RES_SAVEDATA_LOAD`, `=0` volta ao código provisório): o menu oferece
+  Continue Game, New Game, Load Level e Cinematics, e o Continue leva ao
+  último checkpoint.
 - **Mira:** por alguns quadros depois de apertar a mira, o céu e o fundo
   distante ficavam brancos com faixas de ruído magenta e verde. A transição
   da mira copia a cena em meio tamanho pelo NV3089 da CPU para uma memória
@@ -345,6 +353,7 @@ PS3.
 | `PS3RECOMP_ENG_GUEST_OVER=0`, `PS3_RSX_AUTORELEASE=0`, `PS3RECOMP_ENG_BLIT_GPU_COLOR=0` | desligam a correção da mira, o autorelease pool, as cópias da cena na GPU |
 | `PS3_AUDIO_OUT_STEREO=0`, `PS3_AUDIO_LIMITER=0`, `PS3_SPU_INTERP_FAST=0` | voltam a oferecer 5.1, tiram o limitador, voltam ao laço antigo do interpretador |
 | `PS3_RELOCMODS=1` | roda os módulos SPU independentes de posição traduzidos (em teste) |
+| `RES_SAVEDATA_LOAD=0` | o save deixa de ser lido no boot (sem Continue Game) |
 | `PS3RECOMP_METAL_MAX_PIPES=<n>`, `PS3RECOMP_ENG_MAX_PIPELINES=<n>` | tamanho das tabelas de pipeline (65536; 4096/8192 trazem o neon de volta) |
 | `PS3RECOMP_ENG_ZETA16_GPU=0`, `PS3RECOMP_ENG_FETCH_MANY=0`, `PS3RECOMP_ENG_VCACHE_SPARSE=0` | desligam as mudanças de desempenho acima, uma de cada vez |
 | `PS3RECOMP_ENG_BLIT_GPU=0`, `PS3RECOMP_ENG_GUEST_WRITE=0` | desligam a redução de profundidade na GPU / as gravações da CPU em alvos da GPU (ligadas por padrão; desligar traz de volta o menu de pausa quebrado) |

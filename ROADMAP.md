@@ -89,7 +89,8 @@ comes next. Same layout as the Resistance: Fall of Man roadmap.
   steam/water, odd sparks, a water-like distortion following the camera)
   after `PS3RECOMP_FP_UNNORM_VOL` and `PS3RECOMP_ENG_GUEST_WRITE`; fog a
   little darker than on PS3.
-- [ ] Confirm saves across sessions (checkpoint, quit, Continue).
+- [x] Saves across sessions: checkpoints are written, and Continue Game loads
+  the last one (`cellSaveDataUserListAutoLoad`).
 - [ ] (in progress) Relocatable SPU lifts (`PS3_RELOCMODS`): validate on a
   quiet machine and turn on; measure CPU, heat and frame rate.
 - [ ] Validate the ps3recomp v0.19 ports (#670, #693, #635, #666, #659) and

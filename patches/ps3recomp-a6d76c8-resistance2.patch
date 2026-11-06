@@ -8172,7 +8172,7 @@ index 5a1d37f..534c24d 100644
  }
  
 diff --git a/libs/system/cellSaveData.c b/libs/system/cellSaveData.c
-index 286bf47..4ec7597 100644
+index 286bf47..c2e5301 100644
 --- a/libs/system/cellSaveData.c
 +++ b/libs/system/cellSaveData.c
 @@ -62,8 +62,16 @@ static void adopt_gamedata_root(void)
@@ -8357,7 +8357,7 @@ index 286bf47..4ec7597 100644
  {
      if (!dirName || !funcStat)
          return CELL_SAVEDATA_ERROR_PARAM;
-@@ -1551,6 +1587,65 @@ static void hle_cellSaveDataUserAutoSave(ppu_context* ctx)
+@@ -1551,6 +1587,91 @@ static void hle_cellSaveDataUserAutoSave(ppu_context* ctx)
                               container, (void*)(uintptr_t)userdata);
  }
  
@@ -8394,6 +8394,32 @@ index 286bf47..4ec7597 100644
 +        (void*)(uintptr_t)userdata);
 +}
 +
++/* UserListAutoLoad, the same shape as UserListAutoSave. Resistance 2's boot
++ * calls it twice: a funcFixed that answers ERR_NODATA (it only counts the saves)
++ * and one that picks the save and answers OK_NEXT, expecting funcStat and
++ * funcFile to read GAME.SAV. Unregistered, ppu_hle.cpp's fallback ran only
++ * funcFixed and stopped there, so the progress was never read: the Campaign
++ * menu offered New Game and Cinematics and never Continue Game or Load Level,
++ * although every checkpoint was being written. Registered by default;
++ * RES_SAVEDATA_LOAD=0 goes back to the fallback. Probe with the user's save:
++ * GAME.SAV read, Continue Game / Load Level shown, Continue lands in bay. */
++static void hle_cellSaveDataUserListAutoLoad(ppu_context* ctx)
++{
++    const u32 errDialog = (u32)ctx->gpr[5];
++    const uint32_t userdata = savedata_stack_arg(ctx, 10);
++    printf("[cellSaveData] UserListAutoLoad(user=%u, userdata=0x%08X)\n", (u32)ctx->gpr[4], userdata);
++    if (errDialog > 2) { ctx->gpr[3] = (uint64_t)(int64_t)(s32)CELL_SAVEDATA_ERROR_PARAM; return; }
++    const s32 rc = savedata_fixed(0,
++        (CellSaveDataSetList*)(uintptr_t)(u32)ctx->gpr[6],
++        (CellSaveDataSetBuf*)(uintptr_t)(u32)ctx->gpr[7],
++        (CellSaveDataFixedCallback)(uintptr_t)(u32)ctx->gpr[8],
++        (CellSaveDataStatCallback)(uintptr_t)(u32)ctx->gpr[9],
++        (CellSaveDataFileCallback)(uintptr_t)(u32)ctx->gpr[10],
++        (void*)(uintptr_t)userdata);
++    printf("[cellSaveData] UserListAutoLoad -> 0x%08X\n", (u32)rc);
++    ctx->gpr[3] = (uint64_t)(int64_t)rc;
++}
++
 +static void hle_cellSaveDataUserListSave(ppu_context* ctx)
 +{
 +    const uint32_t userdata = savedata_stack_arg(ctx, 9);
@@ -8423,12 +8449,16 @@ index 286bf47..4ec7597 100644
  /* ListAutoLoad's ninth argument is in the guest parameter save area. */
  void ps3_savedata_list_auto_load(ppu_context* ctx)
  {
-@@ -1572,6 +1667,12 @@ void cellSaveData_register_ctx_handlers(void)
+@@ -1572,6 +1693,16 @@ void cellSaveData_register_ctx_handlers(void)
                           hle_cellSaveDataUserAutoLoad);
      ps3_hle_register_ctx(0x52AAC4FAu, "cellSaveDataUserAutoSave",
                           hle_cellSaveDataUserAutoSave);
 +    ps3_hle_register_ctx(0x0E091C36u, "cellSaveDataUserListAutoSave",
 +                         hle_cellSaveDataUserListAutoSave);
++    { const char* e = getenv("RES_SAVEDATA_LOAD");
++      if (!(e && e[0] == '0'))
++          ps3_hle_register_ctx(0x248BD1D8u, "cellSaveDataUserListAutoLoad",
++                               hle_cellSaveDataUserListAutoLoad); }
 +    ps3_hle_register_ctx(0x0F03CFB0u, "cellSaveDataUserListSave",
 +                         hle_cellSaveDataUserListSave);
 +    ps3_hle_register_ctx(0x39DD8425u, "cellSaveDataUserListLoad",

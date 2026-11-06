@@ -98,7 +98,8 @@ vem a seguir. Mesma organização do roadmap do Resistance: Fall of Man.
   pretos no lugar de vapor/água, faíscas estranhas, distorção como água
   acompanhando a câmera) depois de `PS3RECOMP_FP_UNNORM_VOL` e
   `PS3RECOMP_ENG_GUEST_WRITE`; neblina um pouco mais escura que no PS3.
-- [ ] Confirmar os saves entre sessões (checkpoint, sair, Continuar).
+- [x] Saves entre sessões: os checkpoints são gravados, e o Continue Game
+  carrega o último (`cellSaveDataUserListAutoLoad`).
 - [ ] (em andamento) Tradução relocável de SPU (`PS3_RELOCMODS`): validar com
   a máquina livre e ligar; medir CPU, calor e taxa de quadros.
 - [ ] Validar o que foi trazido do ps3recomp v0.19 (#670, #693, #635, #666,
