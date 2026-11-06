@@ -92,6 +92,49 @@ Since 2026-10-29:
   Moonpool area, every such draw dropped); they are scaled as volumes under
   `PS3RECOMP_FP_UNNORM_VOL=1` (on in `play.sh`, being confirmed in play).
 
+Since 2026-10-31:
+
+- **Aiming:** for a few frames after pressing aim, the sky and far
+  background turned white with magenta and green noise bands. The aim
+  transition copies the scene at half size through the CPU-path NV3089 into
+  memory that also holds a swizzled Z16 shadow map; no surface had that
+  pitch, so the texture bind took the shadow map as the newest content,
+  stored the depth over the copy and decoded it as colour. A CPU copy over a
+  target of another layout is now remembered and wins
+  (`PS3RECOMP_ENG_GUEST_OVER`). In probes, 14 of 15 aims flashed before and
+  0 of 10 after.
+- **3-second stalls entering new areas** ("GPU sit and spin timeout"):
+  pipelines whose MSL translation was on disk were built on the RSX thread,
+  and their Metal compiles cost 20-60 ms each, up to 127 in a row. Only
+  pipelines whose functions are already in memory build at once now
+  (`PS3_SHADER_ASYNC_SYNC_HIT=1`).
+- **Memory growth:** the frame-clock thread never drained an autorelease
+  pool, so every render target it created kept a texture descriptor alive
+  (~0.2 MB/s, about 2 GB over 3 hours). Each iteration now runs in a pool
+  (`PS3_RSX_AUTORELEASE`).
+- **Shader function table:** the Metal backend's 4096 compiled functions
+  filled after about 3 hours, the same failure as the pipeline table; it is
+  65536 now (`PS3RECOMP_METAL_MAX_FUNCS`).
+- **Audio clipping:** the runtime offered 5.1, so the game mixed six
+  channels that were then folded to stereo at up to 2.4x full scale. It is
+  offered stereo now, as RPCS3 does, with a peak limiter for what still
+  peaks (`PS3_AUDIO_OUT_STEREO`, `PS3_AUDIO_LIMITER`): 3568 clipped
+  samples in a 365-second probe became 0.
+- **Scene copies on the GPU:** NV3089 colour copies are recorded on the GPU
+  instead of read back (`PS3RECOMP_ENG_BLIT_GPU_COLOR`); readbacks dropped
+  from 372 to 93 per 120 frames.
+- **SPU interpreter:** the dispatch loop no longer writes a shared global and
+  looks up the lifted-code registry on every step (`PS3_SPU_INTERP_FAST`):
+  its own overhead fell from 35-39% to 8-11% of the threads that run it.
+- **Ported from ps3recomp v0.19, off by default while being tested:** the
+  per-source precision modifiers in fragment programs (#670,
+  `PS3RECOMP_FP_SRC_PREC`), the depth clamp (#693,
+  `PS3RECOMP_ENG_DEPTH_CLAMP`), DDX/DDY lowering (#635), the lock-line
+  sleep (#666, `SPU_LOCKLINE_SLEEP`), `SPURS_IDLE_MAX` (#659).
+- **Relocatable SPU lifts** (`PS3_RELOCMODS=1`, off while being tested): the
+  142 position-independent SPU modules the jobs load anywhere in local store
+  were interpreted; lifted, the interpreted steps fall by 96%.
+
 What it took, with the cause of each:
 
 - **SPURS r4 layout:** the Wws_Job policy module takes the canonical r4
@@ -160,12 +203,13 @@ Known issues, being worked on:
 - **Heavy combat** can still drop below 30 fps: SPU-built geometry at new
   addresses every frame misses the vertex cache (same-frame reuse above
   halves the decode; more to do).
+- **Thermal throttling:** the game uses about 3.5 CPU cores at 30 fps; once
+  macOS reports thermal pressure, frame rate can fall to 11-19 fps for tens
+  of seconds. The relocatable SPU lifts above are meant to cut that load.
 - **Effects** to confirm in play after the fixes above: black squares where
   a steam/water effect should be, odd electric sparks, a water-like
   distortion that follows the camera in some places (Moonpool area).
 - The fog reads a little darker than on a PS3.
-- The SPU code levels copy into variable LS addresses still runs in the
-  interpreter (it needs a relocatable lift); it is not the frame limiter.
 
 ## How it works
 
@@ -282,7 +326,10 @@ the window, or press Ctrl+C in the terminal, to quit. The first boot copies
 | `PS3_TELEMETRY=0` | turns off the per-second `[tele]` line (frames, draws) and the 3-second stall report (on in `play.sh`) |
 | `RSX_DRAIN_SPIKE_MS=<ms>` | reports every FIFO pass at least this long with what it was spent on (100 in `play.sh`) |
 | `PS3_SHADER_CACHE=<dir>` / `PS3_SHADER_ASYNC=0` | the shader translation cache (in `RES_DATA/shadercache`) / background pipeline builds (both on in `play.sh`) |
-| `PS3_SHADER_ASYNC_JOBS=<n>`, `PS3_SHADER_ASYNC_SYNC_HIT=0/1/2` | parallel background builds (4); build at once when the translation is cached (2) |
+| `PS3_SHADER_ASYNC_JOBS=<n>`, `PS3_SHADER_ASYNC_SYNC_HIT=0/1/2` | parallel background builds (4); build at once when the functions are in memory (1, the default) or also from the disk cache (2, can stall for seconds) |
+| `PS3RECOMP_ENG_GUEST_OVER=0`, `PS3_RSX_AUTORELEASE=0`, `PS3RECOMP_ENG_BLIT_GPU_COLOR=0` | turn off the aim fix, the autorelease pool, GPU scene copies |
+| `PS3_AUDIO_OUT_STEREO=0`, `PS3_AUDIO_LIMITER=0`, `PS3_SPU_INTERP_FAST=0` | offer 5.1 again, no peak limiter, the old interpreter loop |
+| `PS3_RELOCMODS=1` | run the lifted position-independent SPU modules (being tested) |
 | `PS3RECOMP_METAL_MAX_PIPES=<n>`, `PS3RECOMP_ENG_MAX_PIPELINES=<n>` | pipeline table sizes (65536; 4096/8192 bring back the neon) |
 | `PS3RECOMP_ENG_ZETA16_GPU=0`, `PS3RECOMP_ENG_FETCH_MANY=0`, `PS3RECOMP_ENG_VCACHE_SPARSE=0` | turn off the performance changes above, one at a time |
 | `PS3RECOMP_ENG_BLIT_GPU=0`, `PS3RECOMP_ENG_GUEST_WRITE=0` | GPU depth downsample / CPU-side writes into GPU targets off (both on by default; off brings back the broken pause menu) |

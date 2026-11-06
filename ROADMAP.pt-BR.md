@@ -79,6 +79,14 @@ vem a seguir. Mesma organização do roadmap do Resistance: Fall of Man.
   na GPU religada.
 - [x] Reaproveitamento de vértices no mesmo quadro para a geometria dos SPUs
   desenhada duas vezes (`PS3RECOMP_ENG_VCACHE_FRAMEREUSE`).
+- [x] Corrigidos: o piscar da mira (uma cópia da cena pela CPU sobre a
+  memória de um mapa de sombra); as travadas de 3 segundos ao entrar em áreas
+  novas (compilações do Metal na thread do RSX); a memória subindo (um
+  autorelease pool na thread do relógio de quadros); tabela de 65536 funções
+  de shader; saída estéreo com limitador (sem estouro); cópias da cena na GPU;
+  um laço mais rápido no interpretador de SPU; encerramento limpo ao fechar a
+  janela e com SIGTERM; caminhos de HDD no cellFs e nos troféus; nenhum
+  desenho descartado além de 8192 registros.
 - [x] Medidos e descartados: um fluxo de vértices por atributo
   (`PS3RECOMP_ENG_PLANAR`), um pool reaproveitado de alvos de sombra.
 
@@ -91,9 +99,10 @@ vem a seguir. Mesma organização do roadmap do Resistance: Fall of Man.
   acompanhando a câmera) depois de `PS3RECOMP_FP_UNNORM_VOL` e
   `PS3RECOMP_ENG_GUEST_WRITE`; neblina um pouco mais escura que no PS3.
 - [ ] Confirmar os saves entre sessões (checkpoint, sair, Continuar).
-- [ ] Traduzir o código SPU que as fases copiam para endereços variáveis do
-  LS (uma tradução relocável, como os módulos relocáveis do inFAMOUS 2).
-- [ ] O encerramento que precisa de um kill.
+- [ ] (em andamento) Tradução relocável de SPU (`PS3_RELOCMODS`): validar com
+  a máquina livre e ligar; medir CPU, calor e taxa de quadros.
+- [ ] Validar o que foi trazido do ps3recomp v0.19 (#670, #693, #635, #666,
+  #659) e atualizar o patch do toolkit para a v0.19.
 - [ ] As fases depois de `bay area`.
 - [ ] `RES_LEVEL=<n>`: confirmar se o EBOOT aceita `-level`.
 - [ ] Descobrir por que o front end deixa o port 0 desabilitado e trocar o

@@ -73,6 +73,13 @@ comes next. Same layout as the Resistance: Fall of Man roadmap.
   (`PS3RECOMP_ENG_VCACHE_FRAMEREUSE`).
 - [x] Measured and rejected: one vertex stream per attribute
   (`PS3RECOMP_ENG_PLANAR`), a recycled shadow-target pool.
+- [x] The aim flash (a CPU scene copy over a shadow map's memory).
+- [x] 3-second stalls entering new areas (Metal compiles on the RSX thread).
+- [x] Memory growth (an autorelease pool on the frame-clock thread).
+- [x] Shader function table of 65536; stereo output with a peak limiter (no
+  more clipping); GPU scene copies; a faster SPU interpreter loop.
+- [x] Clean shutdown on window close and SIGTERM; HDD paths for cellFs and
+  trophies; no dropped draws past 8192 records.
 
 ## Next
 
@@ -83,9 +90,10 @@ comes next. Same layout as the Resistance: Fall of Man roadmap.
   after `PS3RECOMP_FP_UNNORM_VOL` and `PS3RECOMP_ENG_GUEST_WRITE`; fog a
   little darker than on PS3.
 - [ ] Confirm saves across sessions (checkpoint, quit, Continue).
-- [ ] Lift the SPU code levels copy into variable LS addresses (a
-  relocatable lift, as inFAMOUS 2's relocatable modules).
-- [ ] The shutdown that needs a kill.
+- [ ] (in progress) Relocatable SPU lifts (`PS3_RELOCMODS`): validate on a
+  quiet machine and turn on; measure CPU, heat and frame rate.
+- [ ] Validate the ps3recomp v0.19 ports (#670, #693, #635, #666, #659) and
+  rebase the toolkit patch on v0.19.
 - [ ] The levels after `bay area`.
 - [ ] `RES_LEVEL=<n>`: confirm whether the EBOOT honours `-level`.
 - [ ] Find out why the front end leaves port 0 disabled, and replace the

@@ -96,6 +96,51 @@ Desde 29/10/2026:
   passam a ser escalados como volume com `PS3RECOMP_FP_UNNORM_VOL=1` (ligado
   no `play.sh`, sendo confirmado jogando).
 
+Desde 31/10/2026:
+
+- **Mira:** por alguns quadros depois de apertar a mira, o céu e o fundo
+  distante ficavam brancos com faixas de ruído magenta e verde. A transição
+  da mira copia a cena em meio tamanho pelo NV3089 da CPU para uma memória
+  que também guarda um mapa de sombra Z16 swizzled; nenhuma superfície tinha
+  aquele pitch, então o bind da textura tomava o mapa de sombra como o
+  conteúdo mais novo, gravava a profundidade por cima da cópia e a decodificava
+  como cor. Uma cópia da CPU sobre um alvo de outro layout agora é lembrada e
+  vence (`PS3RECOMP_ENG_GUEST_OVER`). Nos testes, 14 de 15 miras piscavam
+  antes e 0 de 10 depois.
+- **Travadas de 3 segundos ao entrar em áreas novas** ("GPU sit and spin
+  timeout"): pipelines com a tradução MSL em disco eram montados na thread do
+  RSX, e as compilações do Metal custavam 20-60 ms cada, até 127 seguidas.
+  Agora só são montados na hora os pipelines cujas funções já estão na
+  memória (`PS3_SHADER_ASYNC_SYNC_HIT=1`).
+- **Memória subindo:** a thread do relógio de quadros nunca esvaziava um
+  autorelease pool, então cada alvo de renderização criado mantinha um
+  descritor de textura vivo (~0,2 MB/s, uns 2 GB em 3 horas). Cada volta agora
+  roda dentro de um pool (`PS3_RSX_AUTORELEASE`).
+- **Tabela de funções de shader:** as 4096 funções compiladas do backend
+  Metal enchiam depois de umas 3 horas, a mesma falha da tabela de
+  pipelines; agora são 65536 (`PS3RECOMP_METAL_MAX_FUNCS`).
+- **Som estourando:** o runtime oferecia 5.1, então o jogo mixava seis canais
+  que depois eram reduzidos para estéreo a até 2,4 vezes o fundo de escala.
+  Agora é oferecido estéreo, como no RPCS3, com um limitador para o que ainda
+  passa (`PS3_AUDIO_OUT_STEREO`, `PS3_AUDIO_LIMITER`): 3568 amostras cortadas
+  num teste de 365 segundos viraram 0.
+- **Cópias da cena na GPU:** as cópias de cor do NV3089 são gravadas na GPU
+  em vez de lidas de volta (`PS3RECOMP_ENG_BLIT_GPU_COLOR`); as leituras
+  caíram de 372 para 93 a cada 120 quadros.
+- **Interpretador de SPU:** o laço não grava mais uma global compartilhada
+  nem consulta o registro de código traduzido a cada passo
+  (`PS3_SPU_INTERP_FAST`): o custo dele caiu de 35-39% para 8-11% das threads
+  que o rodam.
+- **Trazido do ps3recomp v0.19, desligado enquanto é testado:** os
+  modificadores de precisão por fonte nos fragment programs (#670,
+  `PS3RECOMP_FP_SRC_PREC`), o limite de profundidade (#693,
+  `PS3RECOMP_ENG_DEPTH_CLAMP`), DDX/DDY (#635), o sono da lock-line (#666,
+  `SPU_LOCKLINE_SLEEP`), `SPURS_IDLE_MAX` (#659).
+- **Tradução relocável de SPU** (`PS3_RELOCMODS=1`, desligada enquanto é
+  testada): os 142 módulos SPU independentes de posição que os jobs carregam
+  em qualquer lugar do LS eram interpretados; traduzidos, os passos
+  interpretados caem 96%.
+
 O que foi preciso, com a causa de cada um:
 
 - **Layout do r4 do SPURS:** o módulo de política Wws_Job usa o layout
@@ -169,13 +214,13 @@ Problemas conhecidos, em andamento:
   em endereços novos a cada quadro erra o cache de vértices (o
   reaproveitamento no mesmo quadro, acima, corta metade da conversão; falta
   mais).
+- **Aquecimento:** o jogo usa uns 3,5 núcleos de CPU a 30 fps; quando o
+  macOS acusa pressão térmica, a taxa pode cair para 11-19 fps por dezenas de
+  segundos. A tradução relocável de SPU acima é para cortar essa carga.
 - **Efeitos** a confirmar jogando depois das correções acima: quadrados
   pretos no lugar de vapor/água, faíscas elétricas estranhas, uma distorção
   como água que acompanha a câmera em alguns lugares (área Moonpool).
 - A neblina sai um pouco mais escura que no PS3.
-- O código SPU que as fases copiam para endereços variáveis do LS ainda
-  roda no interpretador (precisa de uma tradução relocável); não é ele que
-  limita os quadros.
 
 ## Como funciona
 
@@ -296,7 +341,10 @@ PS3.
 | `PS3_TELEMETRY=0` | desliga a linha `[tele]` por segundo (quadros, desenhos) e o relatório de travada de 3 s (ligado no `play.sh`) |
 | `RSX_DRAIN_SPIKE_MS=<ms>` | relata cada passada do FIFO com pelo menos esse tempo e no que foi gasta (100 no `play.sh`) |
 | `PS3_SHADER_CACHE=<pasta>` / `PS3_SHADER_ASYNC=0` | o cache de tradução de shaders (em `RES_DATA/shadercache`) / pipelines compilados em segundo plano (os dois ligados no `play.sh`) |
-| `PS3_SHADER_ASYNC_JOBS=<n>`, `PS3_SHADER_ASYNC_SYNC_HIT=0/1/2` | compilações paralelas em segundo plano (4); compilar na hora quando a tradução está em cache (2) |
+| `PS3_SHADER_ASYNC_JOBS=<n>`, `PS3_SHADER_ASYNC_SYNC_HIT=0/1/2` | compilações paralelas em segundo plano (4); montar na hora quando as funções estão na memória (1, o padrão) ou também do cache em disco (2, pode travar por segundos) |
+| `PS3RECOMP_ENG_GUEST_OVER=0`, `PS3_RSX_AUTORELEASE=0`, `PS3RECOMP_ENG_BLIT_GPU_COLOR=0` | desligam a correção da mira, o autorelease pool, as cópias da cena na GPU |
+| `PS3_AUDIO_OUT_STEREO=0`, `PS3_AUDIO_LIMITER=0`, `PS3_SPU_INTERP_FAST=0` | voltam a oferecer 5.1, tiram o limitador, voltam ao laço antigo do interpretador |
+| `PS3_RELOCMODS=1` | roda os módulos SPU independentes de posição traduzidos (em teste) |
 | `PS3RECOMP_METAL_MAX_PIPES=<n>`, `PS3RECOMP_ENG_MAX_PIPELINES=<n>` | tamanho das tabelas de pipeline (65536; 4096/8192 trazem o neon de volta) |
 | `PS3RECOMP_ENG_ZETA16_GPU=0`, `PS3RECOMP_ENG_FETCH_MANY=0`, `PS3RECOMP_ENG_VCACHE_SPARSE=0` | desligam as mudanças de desempenho acima, uma de cada vez |
 | `PS3RECOMP_ENG_BLIT_GPU=0`, `PS3RECOMP_ENG_GUEST_WRITE=0` | desligam a redução de profundidade na GPU / as gravações da CPU em alvos da GPU (ligadas por padrão; desligar traz de volta o menu de pausa quebrado) |

@@ -65,8 +65,9 @@ base=$(git rev-parse HEAD)   # a6d76c8's tree, under a local commit id
         -o -path ./project -o -path ./port -o -path ./patches -o -path ./ps3recomp \) -prune \
         -o -type f -print ) | sed 's|^\./||' | grep -v -E \
     -e '\.(iso|ISO|elf|ELF|bin|BIN|self|SELF|sprx|SPRX|prx|PRX|sdat|SDAT|edat|EDAT|pkg|PKG|SFB|SFO|sfo|psarc|PSARC|rap|rif|log|ppm|wav|pyc)$' \
+    -e '\.(orig|rej|bak)$' \
     -e '^[^/]+\.(md|sh)$' \
-    -e '^tools/(prepare_r2_[^/]*|apply_r2_frontend_patch\.py|r2_input_probe\.py|compare_r2_logs\.py|regen_r2_jobmods\.sh|extract_jobmods_elf\.py|r2_layout\.py|export_toolkit_patch\.sh|setup_toolkit\.sh|rebuild\.sh|play\.sh|env\.sh)$' \
+    -e '^tools/(prepare_r2_[^/]*|lift_r2_[^/]*|apply_r2_frontend_patch\.py|r2_input_probe\.py|compare_r2_logs\.py|regen_r2_jobmods\.sh|extract_jobmods_elf\.py|r2_layout\.py|export_toolkit_patch\.sh|setup_toolkit\.sh|rebuild\.sh|play\.sh|env\.sh)$' \
     > "$tmp/files" || true
 # Top-level Markdown files and scripts are the port's notes and launchers, not
 # the toolkit's, except the ones upstream has.

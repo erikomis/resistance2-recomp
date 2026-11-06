@@ -113,6 +113,13 @@ unsigned cellGcm_flip_request_count(void);
 
 /* PS3_TELEMETRY: draws in the last frame, and every guest thread's lr. */
 uint32_t rsx_draw_engine_guest_draws(void);
+uint64_t rsx_metal_tele_gpu_ns(void) __attribute__((weak));
+#ifdef __APPLE__
+void* objc_autoreleasePoolPush(void);
+void  objc_autoreleasePoolPop(void* pool);
+#endif
+extern unsigned long long g_spu_interp_tele;
+extern unsigned long long g_spu_depth_restarts;
 void     ppu_report_guest_lrs(void);
 }
 
@@ -232,6 +239,12 @@ static void present_guest_frame(void)
 #include <signal.h>
 #include <unistd.h>
 #include <time.h>
+#include <chrono>
+#ifdef __APPLE__
+#include <mach/mach.h>
+#include <notify.h>
+#include <sys/resource.h>
+#endif
 extern "C" void cellSysutilQueueEvent(int slot, uint32_t status, uint32_t param);
 extern "C" int  cellSaveData_busy(void);
 static int g_clean_exit = -1;            /* resolved in quit_install() */
@@ -382,13 +395,43 @@ static DWORD WINAPI frame_clock(LPVOID)
     ULONGLONG tele_time = GetTickCount64(), tele_last_flip_time = tele_time;
     uint32_t tele_flips = cellGcm_flip_request_count();
     bool tele_stalled = false;
+    /* Who is limiting the frame, per second: time on this thread in the FIFO
+     * drain and in presenting, GPU time of the finished command buffers, CPU
+     * of the whole process, footprint, and macOS thermal pressure (0 nominal,
+     * 1 moderate, 2 heavy, ...). A drop with drain and gpu both low is the
+     * guest (PPU/SPU); therm > 0 at the same moment points at the machine. */
+    uint64_t tele_drain_ns = 0, tele_present_ns = 0, tele_gpu_last = 0, tele_cpu_last = 0;
+    const auto tele_span = [telemetry](uint64_t& acc, auto&& fn) {
+        if (!telemetry) { fn(); return; }
+        const auto t0 = std::chrono::steady_clock::now();
+        fn();
+        acc += (uint64_t)std::chrono::duration_cast<std::chrono::nanoseconds>(
+                   std::chrono::steady_clock::now() - t0).count();
+    };
     const char* stats_env = getenv("PS3RECOMP_FRAME_STATS");
     const bool frame_stats = stats_env && stats_env[0] == '1';
     ULONGLONG stats_time = GetTickCount64();
     const ULONGLONG stats_start = stats_time;
     uint32_t stats_flips = cellGcm_flip_request_count();
 
+    /* PS3_RSX_AUTORELEASE (default 1; =0 is the old loop): drain an autorelease pool on every pass of this
+     * loop. The draw engine runs here, on a plain thread with no pool, and
+     * every Metal object it gets autoreleased (a texture descriptor for each
+     * target it creates: R2 recreates ~25 a frame) was kept until exit:
+     * +150k MTLTextureDescriptorInternal, +38 MB in 200 s of a paused menu,
+     * the ~0.2 MB/s footprint growth of a long session. With the pool, the
+     * same paused-menu probe has no such objects left and a flat footprint. */
+#ifdef __APPLE__
+    const bool rsx_pool = [] { const char* e = getenv("PS3_RSX_AUTORELEASE"); return !(e && e[0] == '0'); }();
+#endif
     for (;;) {
+#ifdef __APPLE__
+        struct PoolScope {
+            void* p;
+            explicit PoolScope(bool on) : p(on ? objc_autoreleasePoolPush() : nullptr) {}
+            ~PoolScope() { if (p) objc_autoreleasePoolPop(p); }
+        } pool_scope(rsx_pool);
+#endif
 #ifdef _WIN32
         Sleep((DWORD)((clock_us + 999) / 1000));
 #else
@@ -417,8 +460,38 @@ static DWORD WINAPI frame_clock(LPVOID)
                         (now - tele_last_flip_time) / 1000.0);
                 ppu_report_guest_lrs();
             }
-            fprintf(stderr, "[tele] frames=%u draws=%u\n", flips - tele_flips,
-                    rsx_draw_engine_guest_draws());
+            {
+                const ULONGLONG ms = now - tele_time ? now - tele_time : 1;
+                const uint64_t gpu = rsx_metal_tele_gpu_ns ? rsx_metal_tele_gpu_ns() : 0;
+                uint64_t cpu = 0; uint32_t rss_mb = 0; int therm = -1;
+#ifdef __APPLE__
+                { struct rusage ru;
+                  if (getrusage(RUSAGE_SELF, &ru) == 0)
+                      cpu = (uint64_t)(ru.ru_utime.tv_sec + ru.ru_stime.tv_sec) * 1000000000ull +
+                            (uint64_t)(ru.ru_utime.tv_usec + ru.ru_stime.tv_usec) * 1000ull; }
+                { task_vm_info_data_t vi; mach_msg_type_number_t n = TASK_VM_INFO_COUNT;
+                  if (task_info(mach_task_self(), TASK_VM_INFO, (task_info_t)&vi, &n) == KERN_SUCCESS)
+                      rss_mb = (uint32_t)(vi.phys_footprint >> 20); }
+                { static int tok = -1; uint64_t lvl = 0;
+                  if (tok == -1 && notify_register_check("com.apple.system.thermalpressurelevel", &tok) != 0)
+                      tok = -2;
+                  if (tok >= 0 && notify_get_state(tok, &lvl) == 0) therm = (int)lvl; }
+#endif
+                const unsigned long long isteps = __atomic_load_n(&g_spu_interp_tele, __ATOMIC_RELAXED);
+                const unsigned long long drest = __atomic_load_n(&g_spu_depth_restarts, __ATOMIC_RELAXED);
+                static unsigned long long isteps0, drest0;
+                fprintf(stderr, "[tele] frames=%u draws=%u drain=%u present=%u gpu=%u (ms/s) cpu=%u%% footprint=%uMB therm=%d"
+                                " spuint=%.1fM/s spudepth=%llu\n",
+                        flips - tele_flips, rsx_draw_engine_guest_draws(),
+                        (unsigned)(tele_drain_ns / 1000000u * 1000u / ms),
+                        (unsigned)(tele_present_ns / 1000000u * 1000u / ms),
+                        (unsigned)((gpu - tele_gpu_last) / 1000000u * 1000u / ms),
+                        (unsigned)((cpu - tele_cpu_last) / 10000000u * 1000u / ms),
+                        rss_mb, therm, (isteps - isteps0) / 1e6 * 1000.0 / ms, drest - drest0);
+                isteps0 = isteps; drest0 = drest;
+                tele_drain_ns = tele_present_ns = 0;
+                tele_gpu_last = gpu; tele_cpu_last = cpu;
+            }
             tele_time = now; tele_flips = flips;
         }
 
@@ -432,11 +505,11 @@ static DWORD WINAPI frame_clock(LPVOID)
              * after the drain races the guest's next-frame writes and shows a
              * mixed one. */
             if (rsx_ok && cellGcm_take_flip_pending())
-                present_guest_frame();
+                tele_span(tele_present_ns, [] { present_guest_frame(); });
             /* Drain the FIFO every tick. This is what writes the RSX sync-fence
              * labels the game's per-frame logic blocks on, so it has to keep
              * advancing at 60 Hz even while present() throttles. */
-            if (rsx_ok) cellGcm_rsx_process_fifo();
+            if (rsx_ok) tele_span(tele_drain_ns, [] { cellGcm_rsx_process_fifo(); });
             next_tick += vblank_us;      /* ~60 Hz by default */
             fired++;
         }
@@ -448,8 +521,8 @@ static DWORD WINAPI frame_clock(LPVOID)
          * The real RSX writes them in microseconds. */
         if (rsx_ok) {
             if (cellGcm_take_flip_pending())
-                present_guest_frame();
-            cellGcm_rsx_process_fifo();
+                tele_span(tele_present_ns, [] { present_guest_frame(); });
+            tele_span(tele_drain_ns, [] { cellGcm_rsx_process_fifo(); });
 
             /* Window events at most every 4 ms, as before PS3_FRAMECLOCK_US:
              * a windowed pump is a dispatch_sync to the main thread, and this
@@ -609,6 +682,18 @@ int main(int argc, char** argv)
      * for 5-6 s, with events ~1 s (A/B on one binary). PS3_LWCOND_EVENTS=0
      * restores the fallback. ppu_lwcond_events.h reads it once, lazily. */
     {
+        /* The host mix is stereo, so offer stereo: Resistance 2 configures the
+         * highest channel count it is offered and mixes for it (0x70F66C), and a
+         * 5.1 mix folded to stereo clipped (3568 clipped samples in a 365 s
+         * probe, 1014 with stereo, 0 with the limiter too; highest peak 1.36).
+         * PS3_AUDIO_OUT_STEREO=0 / PS3_AUDIO_LIMITER=0 turn them off. */
+#ifdef _WIN32
+        if (!getenv("PS3_AUDIO_OUT_STEREO")) _putenv_s("PS3_AUDIO_OUT_STEREO", "1");
+        if (!getenv("PS3_AUDIO_LIMITER")) _putenv_s("PS3_AUDIO_LIMITER", "1");
+#else
+        setenv("PS3_AUDIO_OUT_STEREO", "1", 0);
+        setenv("PS3_AUDIO_LIMITER", "1", 0);
+#endif
         const char* s = getenv("PS3_LWCOND_EVENTS");
 #ifdef _WIN32
         if (!s) _putenv_s("PS3_LWCOND_EVENTS", "1");
