@@ -126,3 +126,16 @@ vem a seguir. Mesma organização do roadmap do Resistance: Fall of Man.
   workloads por instância, a correção do despertar perdido, a aposentadoria
   de overlays, `ESRCH`, NV0039, a releitura do `put` no FIFO, a amostragem
   de recorte).
+
+## Mais adiante
+
+- [ ] Multiplayer online (competitivo e o cooperativo de 8 jogadores). A Sony
+  fechou os servidores do Resistance em abril de 2014. Projetos da comunidade
+  estão trazendo-os de volta para consoles reais e para o RPCS3: há relatos
+  de que o PS Rewired roda o cooperativo e as partidas ranqueadas do
+  Resistance 2 (acessado trocando o DNS do console), e o VGFury mostrou um
+  primeiro alpha de outra restauração em setembro de 2026. Neste port falta
+  toda a parte de rede, que hoje é só simulada (sockets do `sys_net`,
+  `cellHttp`/`cellSsl`, login, tickets e matching do `sceNp`), apontada para
+  um desses servidores da comunidade, com a concordância de quem os mantém.
+  Não começado; a campanha vem primeiro.

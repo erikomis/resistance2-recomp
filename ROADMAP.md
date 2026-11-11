@@ -116,3 +116,15 @@ comes next. Same layout as the Resistance: Fall of Man roadmap.
 - [ ] Send the generic toolkit fixes upstream (per-instance workload tables,
   the lost-wake fix, overlay retirement, `ESRCH`, NV0039, the FIFO `put`
   re-read, sub-rectangle sampling).
+
+## Later
+
+- [ ] Online multiplayer (competitive and the 8-player co-op). Sony closed
+  the Resistance servers in April 2014. Community projects are bringing them
+  back for real consoles and RPCS3: PS Rewired is reported to run Resistance 2
+  co-op and ranked play (reached by changing the console's DNS), and VGFury
+  showed a first alpha of a separate restoration in September 2026. For this
+  port it needs the network side that is only stubbed today (`sys_net`
+  sockets, `cellHttp`/`cellSsl`, `sceNp` sign-in, tickets and matching),
+  pointed at one of those community servers, with their operators'
+  agreement. Not started; the campaign comes first.
