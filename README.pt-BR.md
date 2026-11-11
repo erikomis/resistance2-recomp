@@ -144,10 +144,23 @@ Desde 31/10/2026:
   `PS3RECOMP_FP_SRC_PREC`), o limite de profundidade (#693,
   `PS3RECOMP_ENG_DEPTH_CLAMP`), DDX/DDY (#635), o sono da lock-line (#666,
   `SPU_LOCKLINE_SLEEP`), `SPURS_IDLE_MAX` (#659).
-- **Tradução relocável de SPU** (`PS3_RELOCMODS=1`, desligada enquanto é
-  testada): os 142 módulos SPU independentes de posição que os jobs carregam
-  em qualquer lugar do LS eram interpretados; traduzidos, os passos
-  interpretados caem 96%.
+- **Tradução relocável de SPU** (`tools/lift_r2_relocmods.py`, ligada;
+  `PS3_RELOCMODS=0` desliga): os 142 módulos SPU independentes de posição
+  que os jobs carregam em qualquer lugar do LS eram interpretados.
+  Traduzidos, os passos interpretados caem 80-95%. Com a máquina fria a taxa
+  de quadros e a CPU não mudam no limite de 30 fps; a carga do interpretador
+  quadruplica com a máquina quente, e é aí que a tradução mais economiza.
+- **Segunda fase (bay area): engasgos, cores estranhas, água que parecia
+  seguir a câmera.** Os programas de pós-processamento e de água amostram
+  alvos de renderização em coordenadas de texel, e a escala (1/largura,
+  1/altura) ia escrita no texto do shader; na bay area esses alvos mudam de
+  tamanho com a vista, então cada tamanho era um shader novo e um pipeline
+  novo (37 mil pipelines e 4,3 mil funções Metal numa sessão de 21 minutos,
+  254 mil desenhos pulados enquanto os pipelines compilavam). A escala agora
+  vai no buffer de constantes (`PS3RECOMP_FP_UNNORM_UNIFORM`). Andando quatro
+  minutos pelo corredor alagado: funções 594 → 205, desenhos pulados
+  11 mil → 0, passadas de 100 ms ou mais 6 → 1, segundos abaixo de 25 fps
+  42 → 0.
 
 O que foi preciso, com a causa de cada um:
 
@@ -224,7 +237,8 @@ Problemas conhecidos, em andamento:
   mais).
 - **Aquecimento:** o jogo usa uns 3,5 núcleos de CPU a 30 fps; quando o
   macOS acusa pressão térmica, a taxa pode cair para 11-19 fps por dezenas de
-  segundos. A tradução relocável de SPU acima é para cortar essa carga.
+  segundos. A tradução relocável de SPU acima corta a parte do interpretador
+  nessa carga; o efeito com a máquina quente ainda não foi medido.
 - **Efeitos** a confirmar jogando depois das correções acima: quadrados
   pretos no lugar de vapor/água, faíscas elétricas estranhas, uma distorção
   como água que acompanha a câmera em alguns lugares (área Moonpool).
@@ -352,7 +366,8 @@ PS3.
 | `PS3_SHADER_ASYNC_JOBS=<n>`, `PS3_SHADER_ASYNC_SYNC_HIT=0/1/2` | compilações paralelas em segundo plano (4); montar na hora quando as funções estão na memória (1, o padrão) ou também do cache em disco (2, pode travar por segundos) |
 | `PS3RECOMP_ENG_GUEST_OVER=0`, `PS3_RSX_AUTORELEASE=0`, `PS3RECOMP_ENG_BLIT_GPU_COLOR=0` | desligam a correção da mira, o autorelease pool, as cópias da cena na GPU |
 | `PS3_AUDIO_OUT_STEREO=0`, `PS3_AUDIO_LIMITER=0`, `PS3_SPU_INTERP_FAST=0` | voltam a oferecer 5.1, tiram o limitador, voltam ao laço antigo do interpretador |
-| `PS3_RELOCMODS=1` | roda os módulos SPU independentes de posição traduzidos (em teste) |
+| `PS3_RELOCMODS=0` | deixa os módulos SPU independentes de posição no interpretador |
+| `PS3RECOMP_FP_UNNORM_UNIFORM=0` | volta a escrever a escala de texel dentro de cada shader (traz de volta a explosão de shaders da bay area) |
 | `RES_SAVEDATA_LOAD=0` | o save deixa de ser lido no boot (sem Continue Game) |
 | `PS3RECOMP_METAL_MAX_PIPES=<n>`, `PS3RECOMP_ENG_MAX_PIPELINES=<n>` | tamanho das tabelas de pipeline (65536; 4096/8192 trazem o neon de volta) |
 | `PS3RECOMP_ENG_ZETA16_GPU=0`, `PS3RECOMP_ENG_FETCH_MANY=0`, `PS3RECOMP_ENG_VCACHE_SPARSE=0` | desligam as mudanças de desempenho acima, uma de cada vez |

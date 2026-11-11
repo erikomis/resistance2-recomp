@@ -91,8 +91,10 @@ comes next. Same layout as the Resistance: Fall of Man roadmap.
   little darker than on PS3.
 - [x] Saves across sessions: checkpoints are written, and Continue Game loads
   the last one (`cellSaveDataUserListAutoLoad`).
-- [ ] (in progress) Relocatable SPU lifts (`PS3_RELOCMODS`): validate on a
-  quiet machine and turn on; measure CPU, heat and frame rate.
+- [x] Relocatable SPU lifts on by default (`tools/lift_r2_relocmods.py`).
+- [x] Bay area shader explosion: the texel-coordinate scale goes in the
+  constant buffer (`PS3RECOMP_FP_UNNORM_UNIFORM`).
+- [ ] Measure the relocatable lifts on a hot machine (thermal throttling).
 - [ ] Validate the ps3recomp v0.19 ports (#670, #693, #635, #666, #659) and
   rebase the toolkit patch on v0.19.
 - [ ] The levels after `bay area`.

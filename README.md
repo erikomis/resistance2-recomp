@@ -139,9 +139,22 @@ Since 2026-10-31:
   `PS3RECOMP_FP_SRC_PREC`), the depth clamp (#693,
   `PS3RECOMP_ENG_DEPTH_CLAMP`), DDX/DDY lowering (#635), the lock-line
   sleep (#666, `SPU_LOCKLINE_SLEEP`), `SPURS_IDLE_MAX` (#659).
-- **Relocatable SPU lifts** (`PS3_RELOCMODS=1`, off while being tested): the
-  142 position-independent SPU modules the jobs load anywhere in local store
-  were interpreted; lifted, the interpreted steps fall by 96%.
+- **Relocatable SPU lifts** (`tools/lift_r2_relocmods.py`, on;
+  `PS3_RELOCMODS=0` turns them off): the 142 position-independent SPU
+  modules the jobs load anywhere in local store were interpreted. Lifted,
+  the interpreted steps fall by 80-95%. On a cool machine frame rate and CPU
+  are unchanged at the 30 fps cap; the interpreter's load grows four-fold
+  when the host is hot, which is where the lifts save the most.
+- **Second level (bay area): hitches, strange colours, water that seemed to
+  follow the camera.** Post-process and water programs sample render
+  targets in texel coordinates, and the scale (1/width, 1/height) was baked
+  into the shader text; in the bay area those targets change size with the
+  view, so every size was a new shader and a new pipeline (37,000 pipelines
+  and 4,300 Metal functions in a 21-minute session, 254,000 draws skipped
+  while their pipelines built). The scale now travels in the constant buffer
+  (`PS3RECOMP_FP_UNNORM_UNIFORM`). Walking the flooded corridor for four
+  minutes: functions 594 → 205, draws skipped 11,000 → 0, passes of 100 ms
+  or more 6 → 1, seconds under 25 fps 42 → 0.
 
 What it took, with the cause of each:
 
@@ -213,7 +226,8 @@ Known issues, being worked on:
   halves the decode; more to do).
 - **Thermal throttling:** the game uses about 3.5 CPU cores at 30 fps; once
   macOS reports thermal pressure, frame rate can fall to 11-19 fps for tens
-  of seconds. The relocatable SPU lifts above are meant to cut that load.
+  of seconds. The relocatable SPU lifts above cut the interpreter's share
+  of that load; their effect on a hot machine is not measured yet.
 - **Effects** to confirm in play after the fixes above: black squares where
   a steam/water effect should be, odd electric sparks, a water-like
   distortion that follows the camera in some places (Moonpool area).
@@ -337,7 +351,8 @@ the window, or press Ctrl+C in the terminal, to quit. The first boot copies
 | `PS3_SHADER_ASYNC_JOBS=<n>`, `PS3_SHADER_ASYNC_SYNC_HIT=0/1/2` | parallel background builds (4); build at once when the functions are in memory (1, the default) or also from the disk cache (2, can stall for seconds) |
 | `PS3RECOMP_ENG_GUEST_OVER=0`, `PS3_RSX_AUTORELEASE=0`, `PS3RECOMP_ENG_BLIT_GPU_COLOR=0` | turn off the aim fix, the autorelease pool, GPU scene copies |
 | `PS3_AUDIO_OUT_STEREO=0`, `PS3_AUDIO_LIMITER=0`, `PS3_SPU_INTERP_FAST=0` | offer 5.1 again, no peak limiter, the old interpreter loop |
-| `PS3_RELOCMODS=1` | run the lifted position-independent SPU modules (being tested) |
+| `PS3_RELOCMODS=0` | leave the position-independent SPU modules to the interpreter |
+| `PS3RECOMP_FP_UNNORM_UNIFORM=0` | bake the texel-coordinate scale into each shader again (brings back the bay area's shader explosion) |
 | `RES_SAVEDATA_LOAD=0` | the save is no longer read back at boot (no Continue Game) |
 | `PS3RECOMP_METAL_MAX_PIPES=<n>`, `PS3RECOMP_ENG_MAX_PIPELINES=<n>` | pipeline table sizes (65536; 4096/8192 bring back the neon) |
 | `PS3RECOMP_ENG_ZETA16_GPU=0`, `PS3RECOMP_ENG_FETCH_MANY=0`, `PS3RECOMP_ENG_VCACHE_SPARSE=0` | turn off the performance changes above, one at a time |

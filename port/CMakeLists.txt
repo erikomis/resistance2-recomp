@@ -249,6 +249,16 @@ if(PORT_ENABLE_SPU AND R2_JOBMODS AND EXISTS "${SPU_DIR}/jobmods/jobmods_registe
     list(APPEND SPU_SOURCES ${R2_JOBMODS} "${SPU_DIR}/jobmods/jobmods_register.c")
 endif()
 
+# Position-independent SPU code the jobs load at any LS address (the 142 blobs
+# with the DEADDEAD header). tools/lift_r2_relocmods.py lifts them;
+# PS3_RELOCMODS=0 leaves them to the interpreter.
+file(GLOB R2_RELOCMODS CONFIGURE_DEPENDS "${SPU_DIR}/relocmods/*/spu_recomp.c")
+if(PORT_ENABLE_SPU AND R2_RELOCMODS AND EXISTS "${SPU_DIR}/relocmods/relocmods_register.c")
+    list(LENGTH R2_RELOCMODS R2_RELOCMOD_COUNT)
+    message(STATUS "R2 relocatable SPU modules: ${R2_RELOCMOD_COUNT}")
+    list(APPEND SPU_SOURCES ${R2_RELOCMODS} "${SPU_DIR}/relocmods/relocmods_register.c")
+endif()
+
 add_executable(${PROJECT_NAME}
     main.cpp
     stubs.cpp

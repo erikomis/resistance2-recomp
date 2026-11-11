@@ -55,6 +55,7 @@ port/spu/*/image.bin
 port/spu/*/functions.json
 port/spu/*/lift.json
 port/spu/jobmods/
+port/spu/relocmods/
 port/spu/images/
 port/spu/raw_dump/
 port/spu/captured/

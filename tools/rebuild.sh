@@ -76,10 +76,11 @@ for s in $steps; do
             --functions "$AN/EBOOT.functions.json" --hle-stubs "$AN/EBOOT.imports.json" \
             --output "$RC" ;;
     spu)
-        say "spu (policy module, raw-SPU programs, job modules, raw-SPU loader)"
+        say "spu (policy module, raw-SPU programs, job modules, relocatable modules, raw-SPU loader)"
         PS3RECOMP_DIR=$TK "$PY" "$here/prepare_r2_job_pm.py" --eboot "$E"
         PS3RECOMP_DIR=$TK "$PY" "$here/prepare_r2_rawspu.py" --eboot "$E"
         PS3RECOMP_DIR=$TK "$here/regen_r2_jobmods.sh" "$E"
+        PS3RECOMP_DIR=$TK "$PY" "$here/lift_r2_relocmods.py" "$E"
         PS3RECOMP_DIR=$TK "$PY" "$here/prepare_r2_rawspu_loader.py" --eboot "$E" --out "$RES_GAME/spu_images" ;;
     build)
         say "build"

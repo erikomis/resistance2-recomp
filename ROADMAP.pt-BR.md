@@ -100,8 +100,11 @@ vem a seguir. Mesma organização do roadmap do Resistance: Fall of Man.
   `PS3RECOMP_ENG_GUEST_WRITE`; neblina um pouco mais escura que no PS3.
 - [x] Saves entre sessões: os checkpoints são gravados, e o Continue Game
   carrega o último (`cellSaveDataUserListAutoLoad`).
-- [ ] (em andamento) Tradução relocável de SPU (`PS3_RELOCMODS`): validar com
-  a máquina livre e ligar; medir CPU, calor e taxa de quadros.
+- [x] Tradução relocável de SPU ligada por padrão
+  (`tools/lift_r2_relocmods.py`).
+- [x] Explosão de shaders na bay area: a escala de texel vai no buffer de
+  constantes (`PS3RECOMP_FP_UNNORM_UNIFORM`).
+- [ ] Medir a tradução relocável com a máquina quente (aquecimento).
 - [ ] Validar o que foi trazido do ps3recomp v0.19 (#670, #693, #635, #666,
   #659) e atualizar o patch do toolkit para a v0.19.
 - [ ] As fases depois de `bay area`.
