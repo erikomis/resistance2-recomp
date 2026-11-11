@@ -144,6 +144,15 @@ Desde 31/10/2026:
   `PS3RECOMP_FP_SRC_PREC`), o limite de profundidade (#693,
   `PS3RECOMP_ENG_DEPTH_CLAMP`), DDX/DDY (#635), o sono da lock-line (#666,
   `SPU_LOCKLINE_SLEEP`), `SPURS_IDLE_MAX` (#659).
+- **Superfícies verdes ou com cores erradas no início de uma fase:** os
+  desenhos são pulados enquanto o pipeline deles compila em segundo plano.
+  Agora todo shader em cache é compilado uma vez em segundo plano assim que o
+  jogo abre (`PS3_SHADER_PREWARM`), para o cache de shaders do sistema já
+  tê-lo, e os pipelines com tradução em disco voltam a ser montados na hora,
+  dentro de um limite de tempo de compilação (`PS3_SHADER_SYNC_BUDGET_MS`,
+  8 ms a cada 100 ms), para uma rajada não travar o jogo. Carregando a
+  segunda fase com o cache cheio: desenhos pulados 117 mil → 2 mil, mesma taxa
+  de quadros, sem travada.
 - **Tradução relocável de SPU** (`tools/lift_r2_relocmods.py`, ligada;
   `PS3_RELOCMODS=0` desliga): os 142 módulos SPU independentes de posição
   que os jobs carregam em qualquer lugar do LS eram interpretados.
@@ -363,7 +372,8 @@ PS3.
 | `PS3_TELEMETRY=0` | desliga a linha `[tele]` por segundo (quadros, desenhos) e o relatório de travada de 3 s (ligado no `play.sh`) |
 | `RSX_DRAIN_SPIKE_MS=<ms>` | relata cada passada do FIFO com pelo menos esse tempo e no que foi gasta (100 no `play.sh`) |
 | `PS3_SHADER_CACHE=<pasta>` / `PS3_SHADER_ASYNC=0` | o cache de tradução de shaders (em `RES_DATA/shadercache`) / pipelines compilados em segundo plano (os dois ligados no `play.sh`) |
-| `PS3_SHADER_ASYNC_JOBS=<n>`, `PS3_SHADER_ASYNC_SYNC_HIT=0/1/2` | compilações paralelas em segundo plano (4); montar na hora quando as funções estão na memória (1, o padrão) ou também do cache em disco (2, pode travar por segundos) |
+| `PS3_SHADER_ASYNC_JOBS=<n>`, `PS3_SHADER_ASYNC_SYNC_HIT=0/1/2` | compilações paralelas em segundo plano (4); montar na hora quando as funções estão na memória (1) ou também do cache em disco dentro do limite (2, o padrão) |
+| `PS3_SHADER_PREWARM=0`, `PS3_SHADER_SYNC_BUDGET_MS=<ms>` | sem a compilação em segundo plano dos shaders em cache ao abrir; tempo de compilação permitido a cada 100 ms para montagens feitas na hora a partir do disco (8) |
 | `PS3RECOMP_ENG_GUEST_OVER=0`, `PS3_RSX_AUTORELEASE=0`, `PS3RECOMP_ENG_BLIT_GPU_COLOR=0` | desligam a correção da mira, o autorelease pool, as cópias da cena na GPU |
 | `PS3_AUDIO_OUT_STEREO=0`, `PS3_AUDIO_LIMITER=0`, `PS3_SPU_INTERP_FAST=0` | voltam a oferecer 5.1, tiram o limitador, voltam ao laço antigo do interpretador |
 | `PS3_RELOCMODS=0` | deixa os módulos SPU independentes de posição no interpretador |

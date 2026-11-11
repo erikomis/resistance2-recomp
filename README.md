@@ -139,6 +139,14 @@ Since 2026-10-31:
   `PS3RECOMP_FP_SRC_PREC`), the depth clamp (#693,
   `PS3RECOMP_ENG_DEPTH_CLAMP`), DDX/DDY lowering (#635), the lock-line
   sleep (#666, `SPU_LOCKLINE_SLEEP`), `SPURS_IDLE_MAX` (#659).
+- **Green or wrong-coloured surfaces at the start of a level:** draws are
+  skipped while their pipeline builds in the background. Every cached shader
+  is now compiled once in the background as soon as the game opens
+  (`PS3_SHADER_PREWARM`), so the system's shader cache has it, and pipelines
+  whose translations are on disk build at once again, within a budget of
+  compile time (`PS3_SHADER_SYNC_BUDGET_MS`, 8 ms per 100 ms) so a burst
+  cannot stall the game. Loading the second level with a warm cache: draws
+  skipped 117,000 → 2,000, same frame rate, no stall.
 - **Relocatable SPU lifts** (`tools/lift_r2_relocmods.py`, on;
   `PS3_RELOCMODS=0` turns them off): the 142 position-independent SPU
   modules the jobs load anywhere in local store were interpreted. Lifted,
@@ -348,7 +356,8 @@ the window, or press Ctrl+C in the terminal, to quit. The first boot copies
 | `PS3_TELEMETRY=0` | turns off the per-second `[tele]` line (frames, draws) and the 3-second stall report (on in `play.sh`) |
 | `RSX_DRAIN_SPIKE_MS=<ms>` | reports every FIFO pass at least this long with what it was spent on (100 in `play.sh`) |
 | `PS3_SHADER_CACHE=<dir>` / `PS3_SHADER_ASYNC=0` | the shader translation cache (in `RES_DATA/shadercache`) / background pipeline builds (both on in `play.sh`) |
-| `PS3_SHADER_ASYNC_JOBS=<n>`, `PS3_SHADER_ASYNC_SYNC_HIT=0/1/2` | parallel background builds (4); build at once when the functions are in memory (1, the default) or also from the disk cache (2, can stall for seconds) |
+| `PS3_SHADER_ASYNC_JOBS=<n>`, `PS3_SHADER_ASYNC_SYNC_HIT=0/1/2` | parallel background builds (4); build at once when the functions are in memory (1) or also from the disk cache within the budget (2, the default) |
+| `PS3_SHADER_PREWARM=0`, `PS3_SHADER_SYNC_BUDGET_MS=<ms>` | no background compile of the cached shaders at boot; compile time allowed per 100 ms for builds made at once from the disk cache (8) |
 | `PS3RECOMP_ENG_GUEST_OVER=0`, `PS3_RSX_AUTORELEASE=0`, `PS3RECOMP_ENG_BLIT_GPU_COLOR=0` | turn off the aim fix, the autorelease pool, GPU scene copies |
 | `PS3_AUDIO_OUT_STEREO=0`, `PS3_AUDIO_LIMITER=0`, `PS3_SPU_INTERP_FAST=0` | offer 5.1 again, no peak limiter, the old interpreter loop |
 | `PS3_RELOCMODS=0` | leave the position-independent SPU modules to the interpreter |

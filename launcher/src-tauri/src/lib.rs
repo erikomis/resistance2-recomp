@@ -173,7 +173,7 @@ pub struct Settings {
     /// PS3_SHADER_ASYNC=1 (on, as in tools/play.sh), its parallel builds
     /// (PS3_SHADER_ASYNC_JOBS, 1-8, 4 = the runtime's) and whether a pipeline
     /// whose translation is cached builds at once (PS3_SHADER_ASYNC_SYNC_HIT
-    /// 0/1/2, 1 = the runtime's).
+    /// 0/1/2, 2 = the runtime's).
     pub shader_async: bool,
     pub shader_async_jobs: u32,
     pub shader_sync_hit: u32,
@@ -271,7 +271,7 @@ impl Default for Settings {
             shader_cache: true,
             shader_async: true,
             shader_async_jobs: 4,
-            shader_sync_hit: 1,
+            shader_sync_hit: 2,
             frame_clock_us: 50,
             pad_log: true,
             telemetry: true,
@@ -1296,7 +1296,7 @@ fn launch_env(s: &Settings, disc: &Path, play: &Path, input: &InputEnv) -> Vec<(
         if s.shader_async_jobs != 4 {
             set("PS3_SHADER_ASYNC_JOBS", s.shader_async_jobs.clamp(1, 8).to_string());
         }
-        if s.shader_sync_hit != 1 {
+        if s.shader_sync_hit != 2 {
             set("PS3_SHADER_ASYNC_SYNC_HIT", s.shader_sync_hit.min(2).to_string());
         }
     }
