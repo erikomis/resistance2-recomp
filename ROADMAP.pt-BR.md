@@ -141,7 +141,11 @@ vem a seguir. Mesma organização do roadmap do Resistance: Fall of Man.
   (`PS3_NP_SIGNIN=1`), e com isso aquele jogo entra no PS Rewired. Neste
   port essas mudanças estão no patch do toolkit desde 11/11/2026, todas
   desligadas por padrão (o jogo offline não muda; os testes unitários delas
-  passam aqui). Depois: ver até onde o Resistance 2 chega com elas, descobrir
+  passam aqui). O guia do PS Rewired para o RPCS3 lista o Resistance 2 com o
+  DNS `67.222.156.250` ou com a troca de host
+  `resistance2.ps3.online.scea.com=67.222.156.250`; esse é o nome de servidor
+  que está no executável deste jogo, e `PS3_NET_DNS` / `PS3_NET_HOSTS` cobrem
+  os dois jeitos. Depois: ver até onde o Resistance 2 chega com elas, descobrir
   o que ele pede além delas (`cellHttp`/`cellSsl`, matching do `sceNp`, o
   protocolo do servidor dele) e seguir as regras do servidor da comunidade.
   A campanha vem primeiro.

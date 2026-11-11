@@ -129,7 +129,11 @@ comes next. Same layout as the Resistance: Fall of Man roadmap.
   chosen DNS (`PS3_NET_DNS`), a locally made PSN sign-in and ticket
   (`PS3_NP_SIGNIN=1`), and with them that game signs in to PS Rewired. For
   this port those changes are in the toolkit patch since 2026-11-11, all off
-  by default (offline play is unchanged; their unit tests pass here). Next:
+  by default (offline play is unchanged; their unit tests pass here). PS
+  Rewired's RPCS3 guide lists Resistance 2 with DNS `67.222.156.250` or the
+  host switch `resistance2.ps3.online.scea.com=67.222.156.250`; that is the
+  server name in this game's executable, and `PS3_NET_DNS` / `PS3_NET_HOSTS`
+  cover both ways. Next:
   see how far Resistance 2 gets with them, find what it asks for beyond them
   (`cellHttp`/`cellSsl`, `sceNp` matching, its own server protocol), and
   follow the community server's rules. The campaign comes first.
