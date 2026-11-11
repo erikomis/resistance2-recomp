@@ -89,6 +89,14 @@ vem a seguir. Mesma organização do roadmap do Resistance: Fall of Man.
   desenho descartado além de 8192 registros.
 - [x] Medidos e descartados: um fluxo de vértices por atributo
   (`PS3RECOMP_ENG_PLANAR`), um pool reaproveitado de alvos de sombra.
+- [x] Gatilhos adaptáveis do DualSense, vindos do port do Resistance 1
+  (11/11/2026): o R2 tem o clique de um gatilho de arma e atira no clique
+  (mais ou menos na metade), vibra enquanto está apertado e o jogo vibra; o
+  L2 tem uma resistência leve. Os outros controles continuam com gatilhos
+  livres. `PS3_PAD_ADAPTIVE=0` desliga, `PS3_PAD_FIRE_AT` muda o ponto do
+  aperto; um botão no launcher, e um botão Atirar com R2 (estilo PS5) na
+  página Controles que troca L1/R1 com L2/R2. Ainda não sentido num DualSense
+  de verdade.
 
 ## Próximos passos
 

@@ -345,6 +345,7 @@ the window, or press Ctrl+C in the terminal, to quit. The first boot copies
 | `RES_HTTP_POLL_COMPAT=0` | `cellHttpClientPollConnections` back to the toolkit's default (it now reports "unavailable" so the game's HTTP thread does not spin) |
 | `RES_LEVEL=<n>` | passes `-level <n>` to the game; not confirmed to work yet |
 | `PS3_PAD_LOG=0` | turns off the controller button log (on in `play.sh`) |
+| `PS3_PAD_ADAPTIVE=0` / `PS3_PAD_FIRE_AT=<10-90>` | turns off the DualSense adaptive triggers / where R2 reads as pressed, in percent of its travel (50) |
 | `PS3_LWCOND_EVENTS=0` | `sys_lwcond` back to sleep-and-retry polling (real notifications are the default) |
 | `SPURS_LFQ_NOWAKE=1` | turns off the SPURS lost-wake fix (for comparison) |
 | `SPU_OVL_SIG_OFF=1` / `SPU_OVL_SIG_ONLY=<ids>` | run the job modules interpreted / only these lifted (bisection) |

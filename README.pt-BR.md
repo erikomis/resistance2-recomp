@@ -361,6 +361,7 @@ PS3.
 | `RES_HTTP_POLL_COMPAT=0` | `cellHttpClientPollConnections` volta ao padrão do toolkit (agora ele responde "indisponível" para a thread HTTP do jogo não girar à toa) |
 | `RES_LEVEL=<n>` | passa `-level <n>` para o jogo; ainda não confirmado |
 | `PS3_PAD_LOG=0` | desliga o log de botões do controle (ligado no `play.sh`) |
+| `PS3_PAD_ADAPTIVE=0` / `PS3_PAD_FIRE_AT=<10-90>` | desliga os gatilhos adaptáveis do DualSense / onde o R2 conta como apertado, em porcentagem do curso (50) |
 | `PS3_LWCOND_EVENTS=0` | `sys_lwcond` volta a dormir e tentar de novo (as notificações reais são o padrão) |
 | `SPURS_LFQ_NOWAKE=1` | desliga a correção do despertar perdido do SPURS (para comparar) |
 | `SPU_OVL_SIG_OFF=1` / `SPU_OVL_SIG_ONLY=<ids>` | roda os módulos de job interpretados / só estes traduzidos (bissecção) |

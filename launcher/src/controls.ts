@@ -452,6 +452,17 @@ export function initControls() {
     note(t("controls.resetDone"));
     renderPath();
   });
+  // the PS5 layout: the controller's L1/R1 and L2/R2 bindings trade places
+  // (R2 fires, L2 aims); pressed again, they trade back
+  $("controls-triggers").addEventListener("click", async () => {
+    const c = bindings.controller;
+    [c.l1, c.l2] = [c.l2 ?? [], c.l1 ?? []];
+    [c.r1, c.r2] = [c.r2 ?? [], c.r1 ?? []];
+    endCapture();
+    renderControls();
+    await save();
+    note(t((c.r1 ?? []).includes("righttrigger") ? "controls.triggersOn" : "controls.triggersOff"));
+  });
   // without a file yet this shows the folder it will be written to
   $("controls-open").addEventListener("click", () => mapPath && invoke("reveal", { path: mapPath }));
   window.addEventListener("gamepadconnected", () => {

@@ -3571,10 +3571,10 @@ index 4d916ac..4ef0ff8 100644
      int best = -1;
      size_t best_len = 0;
 diff --git a/libs/input/cellPad.c b/libs/input/cellPad.c
-index 7fa8cab..e046469 100644
+index 7fa8cab..80cac5a 100644
 --- a/libs/input/cellPad.c
 +++ b/libs/input/cellPad.c
-@@ -4,10 +4,28 @@
+@@ -4,10 +4,29 @@
   * Reads real gamepad input from the host and translates to PS3 pad format.
   *
   * Backend selection:
@@ -3601,10 +3601,11 @@ index 7fa8cab..e046469 100644
 + *                               the window is key
 + *   PS3_PAD_SDL=0               ignore physical controllers
 + *   PS3_RUMBLE=0, PS3_RUMBLE_STRENGTH=<0-200>, PS3_RUMBLE_LOG=1   vibration
++ *   PS3_PAD_ADAPTIVE=0, PS3_PAD_FIRE_AT=<10-90>   DualSense adaptive triggers
   */
  
  #include <time.h>
-@@ -19,6 +37,8 @@
+@@ -19,6 +38,8 @@
  #include "../../runtime/platform/win32_compat.h"   /* GetTickCount64 on POSIX */
  #include "../../runtime/ppu/ppu_memory.h"   /* GUEST_PTR, vm_write*: guest EA -> host */
  #include "ps3emu/log_first.h"
@@ -3613,7 +3614,7 @@ index 7fa8cab..e046469 100644
  
  /* PAD_CLOCK=flips: PAD_SCRIPT and PAD_STICK times count guest flips instead of
   * wall-clock seconds. A loaded machine runs a title at a third of its usual
-@@ -53,8 +73,11 @@ static double pad_clock(unsigned long long t0_ms)
+@@ -53,8 +74,11 @@ static double pad_clock(unsigned long long t0_ms)
      #define WIN32_LEAN_AND_MEAN
    #endif
    #include <windows.h>
@@ -3626,7 +3627,7 @@ index 7fa8cab..e046469 100644
  #endif
  
  #if PAD_BACKEND_SDL2
-@@ -96,11 +119,110 @@ static PadHostState  s_host_state[PAD_MAX_HOST_PORTS];
+@@ -96,11 +120,110 @@ static PadHostState  s_host_state[PAD_MAX_HOST_PORTS];
  /* Per-port "a report has arrived since your last read" flag; see cellPadGetData. */
  static int s_data_fresh[PAD_MAX_HOST_PORTS];
  
@@ -3737,7 +3738,7 @@ index 7fa8cab..e046469 100644
  /* ---------------------------------------------------------------------------
   * Rumble (cellPadSetActDirect)
   *
-@@ -113,6 +235,12 @@ static int s_sdl_inited = 0;
+@@ -113,6 +236,12 @@ static int s_sdl_inited = 0;
   * PAD_RUMBLE_HOLD_MS. Large -> the host's low-frequency motor, small -> the
   * high-frequency one, which is how DualShock 4, DualSense and Xbox pads are
   * laid out too.
@@ -3750,7 +3751,7 @@ index 7fa8cab..e046469 100644
   * -------------------------------------------------------------------------*/
  
  #define PAD_RUMBLE_HOLD_MS     1000   /* one SDL request lasts this long ... */
-@@ -121,16 +249,43 @@ static int s_sdl_inited = 0;
+@@ -121,16 +250,43 @@ static int s_sdl_inited = 0;
  typedef struct {
      u16 lo, hi;                 /* what the host motors were last asked for */
      unsigned long long sent_ms; /* when (pad_now_ms), 0 = nothing to renew */
@@ -3799,7 +3800,7 @@ index 7fa8cab..e046469 100644
  }
  
  /* ---------------------------------------------------------------------------
-@@ -143,6 +298,39 @@ static void pad_rumble_levels(u8 small_on, u8 large, u16* lo, u16* hi)
+@@ -143,6 +299,39 @@ static void pad_rumble_levels(u8 small_on, u8 large, u16* lo, u16* hi)
  #define PAD_STICK_DEADZONE  7849
  #define PAD_TRIGGER_THRESHOLD 30
  
@@ -3839,7 +3840,7 @@ index 7fa8cab..e046469 100644
  static u8 pad_xinput_stick_to_u8(short raw, short deadzone)
  {
      float normalized;
-@@ -240,7 +428,8 @@ static void pad_poll_xinput(void)
+@@ -240,7 +429,8 @@ static void pad_poll_xinput(void)
          XINPUT_STATE state;
          memset(&state, 0, sizeof(state));
  
@@ -3849,7 +3850,7 @@ index 7fa8cab..e046469 100644
          if (result != ERROR_SUCCESS) {
              s_host_state[i].connected = 0;
              continue;
-@@ -299,7 +488,8 @@ static void pad_poll_xinput(void)
+@@ -299,7 +489,8 @@ static void pad_poll_xinput(void)
  
  static void pad_init_backend(void)
  {
@@ -3859,7 +3860,7 @@ index 7fa8cab..e046469 100644
  }
  
  static void pad_shutdown_backend(void)
-@@ -333,79 +523,216 @@ static u8 pad_sdl_trigger_to_u8(int raw)
+@@ -333,79 +524,382 @@ static u8 pad_sdl_trigger_to_u8(int raw)
      return (u8)val;
  }
  
@@ -3897,6 +3898,169 @@ index 7fa8cab..e046469 100644
      r->sent_ms = on ? pad_now_ms() : 0;
  }
  
++/* ---- DualSense adaptive triggers ------------------------------------------
++ * A PS3 pad has no adaptive triggers; on a DualSense the triggers get a feel
++ * from what the title already does:
++ *   - the right trigger clicks like a gun's: resistance up to a break point,
++ *     then free travel. It reads as pressed only past the break (about half
++ *     way), so a shot goes off at the click;
++ *   - the left trigger has a light, even resistance (aiming);
++ *   - while the right trigger is held and the title runs the motors (a
++ *     weapon firing), the right trigger buzzes with them instead.
++ * The effects follow the physical triggers, whatever PS3 control the map
++ * binds them to. They go out through SDL_GameControllerSendEffect as the
++ * trigger blocks of the DualSense output report (the layout SDL's
++ * testgamecontroller sends), only when they change; both triggers are set
++ * free again when the controller is closed and when the process exits. A
++ * controller that refuses the effect (not a DualSense, or no enhanced mode)
++ * keeps free triggers and the usual press point.
++ *
++ *   PS3_PAD_ADAPTIVE=0        off: free triggers, pressed past 3000 as before
++ *   PS3_PAD_FIRE_AT=<10-90>   where the right trigger reads as pressed, in
++ *                             percent of its travel (50)
++ * -------------------------------------------------------------------------*/
++
++#define PAD_TRIGGER_PRESS       3000   /* SDL trigger value read as pressed (0-32767) */
++#define PAD_ADAPT_MIN_GAP_MS      30   /* effect reports at most this often */
++
++enum { PAD_TRIG_UNSET = -1, PAD_TRIG_OFF = 0, PAD_TRIG_WEAPON, PAD_TRIG_FEEDBACK, PAD_TRIG_BUZZ };
++
++typedef struct {
++    int on;                       /* a DualSense taking effects */
++    int right, left;              /* effect last sent (PAD_TRIG_*; BUZZ + amplitude) */
++    unsigned long long sent_ms;
++} PadAdaptive;
++static PadAdaptive s_adapt[PAD_MAX_HOST_PORTS];
++
++static int pad_adaptive_enabled(void)
++{
++    static int on = -1;
++    if (on < 0) { const char* e = getenv("PS3_PAD_ADAPTIVE"); on = !(e && e[0] == '0'); }
++    return on;
++}
++
++/* The right trigger's press point (SDL units) while the gun click is on. */
++static int pad_adaptive_fire_at(void)
++{
++    static int at = -1;
++    if (at < 0) {
++        const char* e = getenv("PS3_PAD_FIRE_AT");
++        int pct = e && *e ? atoi(e) : 50;
++        if (pct < 10) pct = 10;
++        if (pct > 90) pct = 90;
++        at = 32767 * pct / 100;
++    }
++    return at;
++}
++
++/* One trigger's 11-byte effect block (the DualSense's own effect modes:
++ * 0x05 off, 0x21 feedback, 0x25 weapon, 0x26 vibration). Positions are the
++ * ten zones of the trigger's travel (0-9), strengths 1-8. */
++static void pad_trig_block(uint8_t out[11], int effect)
++{
++    memset(out, 0, 11);
++    if (effect == PAD_TRIG_WEAPON) {
++        /* resistance from zone 2, breaking at zone 5, strength 6 */
++        const unsigned zones = (1u << 2) | (1u << 5);
++        out[0] = 0x25;
++        out[1] = (uint8_t)(zones & 0xFF);
++        out[2] = (uint8_t)(zones >> 8);
++        out[3] = 6 - 1;
++    } else if (effect == PAD_TRIG_FEEDBACK) {
++        /* light even resistance from zone 1: strength 2 */
++        unsigned active = 0;
++        uint32_t force = 0;
++        for (int z = 1; z < 10; z++) { active |= 1u << z; force |= (uint32_t)(2 - 1) << (3 * z); }
++        out[0] = 0x21;
++        out[1] = (uint8_t)(active & 0xFF); out[2] = (uint8_t)(active >> 8);
++        out[3] = (uint8_t)force; out[4] = (uint8_t)(force >> 8);
++        out[5] = (uint8_t)(force >> 16); out[6] = (uint8_t)(force >> 24);
++    } else if (effect > PAD_TRIG_BUZZ) {
++        /* vibration over the whole travel, amplitude 1-8, 30 Hz */
++        const int amp = effect - PAD_TRIG_BUZZ;
++        unsigned active = 0;
++        uint32_t ampz = 0;
++        for (int z = 0; z < 10; z++) { active |= 1u << z; ampz |= (uint32_t)(amp - 1) << (3 * z); }
++        out[0] = 0x26;
++        out[1] = (uint8_t)(active & 0xFF); out[2] = (uint8_t)(active >> 8);
++        out[3] = (uint8_t)ampz; out[4] = (uint8_t)(ampz >> 8);
++        out[5] = (uint8_t)(ampz >> 16); out[6] = (uint8_t)(ampz >> 24);
++        out[9] = 30;
++    } else {
++        out[0] = 0x05;
++    }
++}
++
++/* Send both triggers' effects; 0 when the controller took them. */
++static int pad_trig_send(SDL_GameController* gc, int right, int left)
++{
++    uint8_t st[47];   /* DS5EffectsState_t */
++    memset(st, 0, sizeof st);
++    st[0] = 0x04 | 0x08;   /* right and left trigger effects */
++    pad_trig_block(st + 10, right);
++    pad_trig_block(st + 21, left);
++    return SDL_GameControllerSendEffect(gc, st, (int)sizeof st);
++}
++
++/* A new controller on port p: a DualSense gets its triggers' feel. */
++static void pad_adaptive_open(int p, SDL_GameController* gc)
++{
++    PadAdaptive* a = &s_adapt[p];
++    memset(a, 0, sizeof *a);
++    a->right = a->left = PAD_TRIG_UNSET;
++    if (!pad_adaptive_enabled() || SDL_GameControllerGetType(gc) != SDL_CONTROLLER_TYPE_PS5) return;
++    if (pad_trig_send(gc, PAD_TRIG_WEAPON, PAD_TRIG_FEEDBACK) != 0) {
++        fprintf(stderr, "[cellPad] port %d: adaptive triggers not available (%s)\n", p, SDL_GetError());
++        return;
++    }
++    a->on = 1;
++    a->right = PAD_TRIG_WEAPON;
++    a->left = PAD_TRIG_FEEDBACK;
++    a->sent_ms = pad_now_ms();
++    fprintf(stderr, "[cellPad] port %d: adaptive triggers on (fire at %d%%)\n", p,
++            pad_adaptive_fire_at() * 100 / 32767 + 1);
++}
++
++/* Free triggers again (closing, exiting). */
++static void pad_adaptive_release(int p, SDL_GameController* gc, int gone)
++{
++    PadAdaptive* a = &s_adapt[p];
++    if (a->on && !gone && gc) pad_trig_send(gc, PAD_TRIG_OFF, PAD_TRIG_OFF);
++    memset(a, 0, sizeof *a);
++}
++
++/* The effects for this poll; returns the right trigger's press point. */
++static int pad_adaptive_update(int p, SDL_GameController* gc, int rt)
++{
++    PadAdaptive* a = &s_adapt[p];
++    if (!a->on) return PAD_TRIGGER_PRESS;
++    const int fire_at = pad_adaptive_fire_at();
++    const PadRumble* r = &s_rumble[p];
++    const unsigned level = r->lo > r->hi ? r->lo : r->hi;
++    int right = PAD_TRIG_WEAPON;
++    if (rt > fire_at && level) {
++        int amp = 1 + (int)(level * 7u / 65535u);
++        right = PAD_TRIG_BUZZ + (amp > 8 ? 8 : amp);
++    }
++    if (right != a->right) {
++        const unsigned long long now = pad_now_ms();
++        if (now - a->sent_ms >= PAD_ADAPT_MIN_GAP_MS && pad_trig_send(gc, right, a->left) == 0) {
++            a->right = right;
++            a->sent_ms = now;
++        }
++    }
++    return fire_at;
++}
++
++/* At exit: no trigger stays stiff after the game. */
++static void pad_adaptive_atexit(void)
++{
++    if (!pad_lock_try()) return;   /* a poll is mid-way: leave it */
++    for (int p = 0; p < PAD_MAX_HOST_PORTS; p++)
++        if (s_sdl_controllers[p]) pad_adaptive_release(p, s_sdl_controllers[p], 0);
++    pad_unlock();
++}
++
 +/* ---- hot-plug ------------------------------------------------------------
 + * A DualSense over Bluetooth drops off when it is switched off or idles, and
 + * comes back as a NEW SDL device (a new instance id, maybe another index).
@@ -3934,6 +4098,7 @@ index 7fa8cab..e046469 100644
 +    if (!gc) return;
 +    if (gone) fprintf(stderr, "[cellPad] SDL controller on port %d disconnected (instance %d)\n", p, (int)s_sdl_ids[p]);
 +    else      SDL_GameControllerRumble(gc, 0, 0, 0);
++    pad_adaptive_release(p, gc, gone);
 +    SDL_GameControllerClose(gc);
 +    s_sdl_controllers[p] = NULL;
 +    s_sdl_ids[p] = -1;
@@ -3967,6 +4132,7 @@ index 7fa8cab..e046469 100644
 +        s_sdl_had[port] = 1;
 +        memset(&s_rumble[port], 0, sizeof s_rumble[port]);   /* nothing left over from before */
 +        SDL_GameControllerRumble(gc, 0, 0, 0);
++        pad_adaptive_open(port, gc);
 +        const char* name = SDL_GameControllerName(gc);
 +        fprintf(stderr, "[cellPad] SDL controller %s on port %d: %s (instance %d)%s\n",
 +                back ? "reconnected" : "connected", port, name ? name : "?", (int)id,
@@ -4068,8 +4234,9 @@ index 7fa8cab..e046469 100644
 +        uint32_t in = 0;
 +        for (int b = 0; b < SDL_CONTROLLER_BUTTON_MAX && b < PIM_PAD_TRIGGER_LEFT; b++)
 +            if (SDL_GameControllerGetButton(gc, (SDL_GameControllerButton)b)) in |= 1u << b;
-+        if (lt > 3000) in |= 1u << PIM_PAD_TRIGGER_LEFT;
-+        if (rt > 3000) in |= 1u << PIM_PAD_TRIGGER_RIGHT;
++        const int fire_at = pad_adaptive_update(i, gc, rt);
++        if (lt > PAD_TRIGGER_PRESS) in |= 1u << PIM_PAD_TRIGGER_LEFT;
++        if (rt > fire_at) in |= 1u << PIM_PAD_TRIGGER_RIGHT;
 +        uint32_t ctl = 0;
 +        for (int c = 0; c < PIM_N_CONTROLS; c++)
 +            if (map->pad[c] & in) ctl |= 1u << c;
@@ -4118,7 +4285,7 @@ index 7fa8cab..e046469 100644
  
          /* Pressure: SDL has digital buttons, so 0 or 255 */
          s_host_state[i].press_up       = (btns & CELL_PAD_CTRL_UP)       ? 255 : 0;
-@@ -423,32 +750,51 @@ static void pad_poll_sdl2(void)
+@@ -423,32 +917,52 @@ static void pad_poll_sdl2(void)
  
  static void pad_init_backend(void)
  {
@@ -4151,6 +4318,7 @@ index 7fa8cab..e046469 100644
              SDL_InitSubSystem(SDL_INIT_GAMECONTROLLER);
          }
          s_sdl_inited = 1;
++        atexit(pad_adaptive_atexit);
      }
      memset(s_sdl_controllers, 0, sizeof(s_sdl_controllers));
 +    for (int p = 0; p < PAD_MAX_HOST_PORTS; p++) s_sdl_ids[p] = -1;
@@ -4183,7 +4351,7 @@ index 7fa8cab..e046469 100644
      memset(s_rumble, 0, sizeof s_rumble);
  }
  
-@@ -485,6 +831,240 @@ static unsigned long long pad_now_ms(void)
+@@ -485,6 +999,240 @@ static unsigned long long pad_now_ms(void)
  #endif
  }
  
@@ -4424,7 +4592,7 @@ index 7fa8cab..e046469 100644
  static void pad_poll_backend(void)
  {
      /* Benign race: two threads may poll in the same tick. That costs one extra
-@@ -492,6 +1072,7 @@ static void pad_poll_backend(void)
+@@ -492,6 +1240,7 @@ static void pad_poll_backend(void)
      static unsigned long long s_last_ms = 0;
      unsigned long long now = pad_now_ms();
      if (s_last_ms && now - s_last_ms < PAD_POLL_INTERVAL_MS) return;
@@ -4432,7 +4600,7 @@ index 7fa8cab..e046469 100644
      s_last_ms = now;
      /* A real pad streams reports at roughly this rate whether or not anything
       * changed, and libpad buffers them; a fresh sweep is a fresh report for
-@@ -505,7 +1086,20 @@ static void pad_poll_backend(void)
+@@ -505,7 +1254,20 @@ static void pad_poll_backend(void)
  #endif
  #ifdef _WIN32
      if (!s_host_state[0].connected) pad_poll_keyboard();
@@ -4453,7 +4621,7 @@ index 7fa8cab..e046469 100644
  }
  
  /* ---------------------------------------------------------------------------
-@@ -526,15 +1120,24 @@ s32 cellPadInit(u32 max_connect)
+@@ -526,15 +1288,24 @@ s32 cellPadInit(u32 max_connect)
      if (max_connect == 0 || max_connect > 127)
          return CELL_PAD_ERROR_INVALID_PARAMETER;
  
@@ -4478,7 +4646,7 @@ index 7fa8cab..e046469 100644
  
      return CELL_OK;
  }
-@@ -546,7 +1149,9 @@ s32 cellPadEnd(void)
+@@ -546,7 +1317,9 @@ s32 cellPadEnd(void)
      if (!s_pad_initialized)
          return CELL_PAD_ERROR_NOT_OPENED;
  
@@ -4488,7 +4656,7 @@ index 7fa8cab..e046469 100644
  
      s_pad_initialized = 0;
      s_max_connect = 0;
-@@ -716,9 +1321,29 @@ skip_inject: ;
+@@ -716,9 +1489,29 @@ skip_inject: ;
                    held[i]--;
                    data->button[CELL_PAD_BTN_OFFSET_DIGITAL1] |= (u16)(ev[i].mask & 0xFF);
                    data->button[CELL_PAD_BTN_OFFSET_DIGITAL2] |= (u16)((ev[i].mask >> 8) & 0xFF);
@@ -4520,7 +4688,7 @@ index 7fa8cab..e046469 100644
                }
            }
        } }
-@@ -735,6 +1360,7 @@ skip_inject: ;
+@@ -735,6 +1528,7 @@ skip_inject: ;
       *   echo 0x0040 4 > pad.txt  # DOWN for 4 polls (menus auto-repeat a
       *                            # long hold; the default is 40)
       */
@@ -4528,7 +4696,7 @@ index 7fa8cab..e046469 100644
      { static int s_pf = -1; static char pf_path[512];
        static unsigned held_mask = 0; static int held_n = 0;
        if (s_pf < 0) { const char* e = getenv("PAD_FILE");
-@@ -746,11 +1372,25 @@ skip_inject: ;
+@@ -746,11 +1540,25 @@ skip_inject: ;
                if (f) {
                    char buf[64]; buf[0] = 0;
                    if (fgets(buf, sizeof buf, f)) {
@@ -4559,7 +4727,7 @@ index 7fa8cab..e046469 100644
                    }
                    fclose(f);
                    if (held_n > 0) { FILE* w = fopen(pf_path, "wb"); if (w) fclose(w); }
-@@ -782,6 +1422,12 @@ skip_inject: ;
+@@ -782,6 +1590,12 @@ skip_inject: ;
        if (s_st && pad_clock(s_t0) >= s_from && pad_clock(s_t0) < s_until) { hs->analog_lx = s_v[0]; hs->analog_ly = s_v[1];
                    hs->analog_rx = s_v[2]; hs->analog_ry = s_v[3];
                    hs->connected = 1; }
@@ -4572,7 +4740,7 @@ index 7fa8cab..e046469 100644
        /* PAD_SWEEP=<seconds per step>: walk the sticks through a fixed set of
         * deflections instead of holding one. Guessing a single stick position and
         * re-running costs ~5 minutes a try; a sweep answers "can input move the
-@@ -896,6 +1542,21 @@ emit:
+@@ -896,6 +1710,21 @@ emit:
      }
      {
          unsigned int ea = (unsigned int)(uintptr_t)data_guest;
@@ -4594,7 +4762,7 @@ index 7fa8cab..e046469 100644
          vm_write32((unsigned long long)ea + 0, (unsigned int)data->len);   /* len (s32) */
          for (int _i = 0; _i < CELL_PAD_MAX_CODES; _i++)                    /* button[] u16 */
              vm_write16((unsigned long long)ea + 4 + (unsigned int)_i * 2, data->button[_i]);
-@@ -946,7 +1607,7 @@ s32 cellPadGetInfo(CellPadInfo2* info)
+@@ -946,7 +1775,7 @@ s32 cellPadGetInfo(CellPadInfo2* info)
                    (s_host_state[i].connected || i == 0));
          vm_write16(gaddr + 0x00C + i * 2, on ? 0x054C : 0);   /* vendor: Sony  */
          vm_write16(gaddr + 0x10A + i * 2, on ? 0x0268 : 0);   /* product: DS3  */
@@ -4603,7 +4771,7 @@ index 7fa8cab..e046469 100644
      }
      return CELL_OK;
  }
-@@ -973,7 +1634,7 @@ s32 cellPadGetInfo2(CellPadInfo2* info_guest)
+@@ -973,7 +1802,7 @@ s32 cellPadGetInfo2(CellPadInfo2* info_guest)
           * boot flows that block until a controller is connected can proceed even
           * with no physical device attached. */
          if (s_host_state[i].connected || i == 0) {
@@ -4612,7 +4780,7 @@ index 7fa8cab..e046469 100644
              info->port_setting[i]      = s_port_setting[i];
              info->device_capability[i] = CELL_PAD_CAPABILITY_PS3_CONFORMITY
                                         | CELL_PAD_CAPABILITY_PRESS_MODE
-@@ -983,7 +1644,7 @@ s32 cellPadGetInfo2(CellPadInfo2* info_guest)
+@@ -983,7 +1812,7 @@ s32 cellPadGetInfo2(CellPadInfo2* info_guest)
              info->device_type[i]       = CELL_PAD_DEV_TYPE_STANDARD;
              connected++;
          } else {
@@ -4621,7 +4789,7 @@ index 7fa8cab..e046469 100644
          }
      }
      info->now_connect = connected;
-@@ -1028,7 +1689,7 @@ s32 cellPadPeriphGetInfo(CellPadPeriphInfo* info_guest)
+@@ -1028,7 +1857,7 @@ s32 cellPadPeriphGetInfo(CellPadPeriphInfo* info_guest)
          /* Same virtual-pad-on-port-0 rule as cellPadGetInfo2, so both views of
           * the ports agree (a game that cross-checks them must see one truth). */
          if ((i < PAD_MAX_HOST_PORTS && s_host_state[i].connected) || i == 0) {
@@ -4630,7 +4798,7 @@ index 7fa8cab..e046469 100644
              info->port_setting[i]      = s_port_setting[i];
              info->device_capability[i] = CELL_PAD_CAPABILITY_PS3_CONFORMITY
                                         | CELL_PAD_CAPABILITY_PRESS_MODE
-@@ -1040,7 +1701,7 @@ s32 cellPadPeriphGetInfo(CellPadPeriphInfo* info_guest)
+@@ -1040,7 +1869,7 @@ s32 cellPadPeriphGetInfo(CellPadPeriphInfo* info_guest)
              info->pclass_profile[i]    = 0;
              connected++;
          } else {
@@ -4639,7 +4807,7 @@ index 7fa8cab..e046469 100644
          }
      }
      info->now_connect = connected;
-@@ -1104,6 +1765,39 @@ s32 cellPadSetPressMode(u32 port_no, u32 mode)
+@@ -1104,6 +1933,39 @@ s32 cellPadSetPressMode(u32 port_no, u32 mode)
      return CELL_OK;
  }
  
@@ -4679,7 +4847,7 @@ index 7fa8cab..e046469 100644
  s32 cellPadGetCapabilityInfo(u32 port_no, CellPadCapabilityInfo* info)
  {
      if (!s_pad_initialized)
-@@ -1136,29 +1830,43 @@ s32 cellPadSetActDirect(u32 port_no, CellPadActParam* param)
+@@ -1136,29 +1998,43 @@ s32 cellPadSetActDirect(u32 port_no, CellPadActParam* param)
  
      param = GUEST_PTR(param, CellPadActParam*);
  
@@ -5838,12 +6006,185 @@ index 0000000..155c6af
 +}
 +/* Read the mouse settings from the environment again. */
 +void test_pad_reload_mouse(void) { s_mouse_on = -1; }
+diff --git a/libs/input/tests/test_pad_adaptive.c b/libs/input/tests/test_pad_adaptive.c
+new file mode 100644
+index 0000000..bc9bd08
+--- /dev/null
++++ b/libs/input/tests/test_pad_adaptive.c
+@@ -0,0 +1,167 @@
++/* cellPad's DualSense adaptive triggers: a DualSense gets a gun click on the
++ * right trigger (pressed only past the break) and a light resistance on the
++ * left; firing with the motors running makes the right trigger buzz, and it
++ * clicks again afterwards; closing the controller frees both triggers. A
++ * controller that refuses effects, and PS3_PAD_ADAPTIVE=0, keep free
++ * triggers pressed past 3000 as before.
++ *
++ *   cc -std=gnu17 -I include -isystem /opt/homebrew/include \
++ *      -isystem /opt/homebrew/include/SDL2 libs/input/tests/test_pad_adaptive.c \
++ *      -o /tmp/test_pad_adaptive && /tmp/test_pad_adaptive
++ *
++ * Nothing links SDL: the test defines every SDL call the backend makes.
++ */
++#include "../cellPad.c"
++#include <assert.h>
++#include <sys/mman.h>
++uint8_t* vm_base;
++uint32_t ppu_vm_size;
++int g_resv_store_active;
++uint32_t g_ww_lo, g_ww_hi;
++void ppu_resv_break_store(uint64_t ea) { (void)ea; }
++void ps3_ww_report_inline(uint32_t a, uint64_t v, int w) { (void)a; (void)v; (void)w; }
++int spu_coh_is_reserved(uint32_t a) { (void)a; return 0; }
++void spu_coh_notify_write(uint32_t a) { (void)a; }
++void spu_lockline_lock(void) {}
++void spu_lockline_unlock(void) {}
++u32 cellGcm_flip_request_count(void) { return 0; }
++/* R2's cellPadGetData debug dumps (runtime/ppu), unused here. */
++void ppu_bctrl_ring_dump_all(const char* t) { (void)t; }
++void ppu_dump_inputsys(const char* t) { (void)t; }
++void ppu_statescan_diff(uint32_t a, uint32_t b, const char* t) { (void)a; (void)b; (void)t; }
++
++/* ---- the fake SDL: one controller ------------------------------------------ */
++static struct {
++    int present, closed, ps5, refuse;
++    Sint16 lt, rt;
++    int effects;                 /* SendEffect calls */
++    uint8_t last[47];            /* the last effect report */
++} s_pad = { .present = 1, .ps5 = 1 };
++
++int SDL_NumJoysticks(void) { return s_pad.present; }
++SDL_bool SDL_IsGameController(int idx) { return idx == 0 && s_pad.present ? SDL_TRUE : SDL_FALSE; }
++SDL_JoystickID SDL_JoystickGetDeviceInstanceID(int idx) { return idx == 0 ? 1 : -1; }
++SDL_JoystickGUID SDL_JoystickGetDeviceGUID(int idx) { SDL_JoystickGUID g; memset(&g, 0, sizeof g); g.data[0] = (Uint8)idx; return g; }
++const char* SDL_JoystickNameForIndex(int idx) { (void)idx; return "Fake DualSense"; }
++SDL_GameController* SDL_GameControllerOpen(int idx) { (void)idx; s_pad.closed = 0; return (SDL_GameController*)&s_pad; }
++void SDL_GameControllerClose(SDL_GameController* gc) { (void)gc; s_pad.closed = 1; }
++SDL_bool SDL_GameControllerGetAttached(SDL_GameController* gc) { (void)gc; return s_pad.present ? SDL_TRUE : SDL_FALSE; }
++const char* SDL_GameControllerName(SDL_GameController* gc) { (void)gc; return "Fake DualSense"; }
++SDL_GameControllerType SDL_GameControllerGetType(SDL_GameController* gc)
++{
++    (void)gc; return s_pad.ps5 ? SDL_CONTROLLER_TYPE_PS5 : SDL_CONTROLLER_TYPE_XBOXONE;
++}
++SDL_bool SDL_GameControllerHasRumble(SDL_GameController* gc) { (void)gc; return SDL_TRUE; }
++int SDL_GameControllerRumble(SDL_GameController* gc, Uint16 lo, Uint16 hi, Uint32 ms) { (void)gc; (void)lo; (void)hi; (void)ms; return 0; }
++int SDL_GameControllerSendEffect(SDL_GameController* gc, const void* data, int size)
++{
++    (void)gc;
++    assert(!s_pad.closed && size == 47);
++    if (s_pad.refuse) return -1;
++    memcpy(s_pad.last, data, 47);
++    s_pad.effects++;
++    return 0;
++}
++Uint8 SDL_GameControllerGetButton(SDL_GameController* gc, SDL_GameControllerButton b) { (void)gc; (void)b; return 0; }
++Sint16 SDL_GameControllerGetAxis(SDL_GameController* gc, SDL_GameControllerAxis a)
++{
++    (void)gc;
++    return a == SDL_CONTROLLER_AXIS_TRIGGERLEFT ? s_pad.lt : a == SDL_CONTROLLER_AXIS_TRIGGERRIGHT ? s_pad.rt : 0;
++}
++void SDL_GameControllerUpdate(void) {}
++int SDL_PeepEvents(SDL_Event* ev, int n, SDL_eventaction action, Uint32 lo, Uint32 hi) { (void)ev; (void)n; (void)action; (void)lo; (void)hi; return 0; }
++Uint32 SDL_WasInit(Uint32 flags) { return flags; }
++int SDL_InitSubSystem(Uint32 flags) { (void)flags; return 0; }
++SDL_bool SDL_SetHint(const char* name, const char* value) { (void)name; (void)value; return SDL_TRUE; }
++const char* SDL_GetError(void) { return "fake"; }
++
++/* ---- helpers ---------------------------------------------------------------- */
++static void poll_wait(int ms)
++{
++    usleep((unsigned)ms * 1000);
++    cellPad_poll();
++}
++/* R2 as the title reads it: bit 0x02 of DIGITAL2. */
++static int r2_down(void)
++{
++    const uint32_t ea = 0x2000;
++    usleep((PAD_POLL_INTERVAL_MS + 2) * 1000);
++    assert(cellPadGetData(0, (CellPadData*)(uintptr_t)ea) == CELL_OK);
++    const uint8_t* b = vm_base + ea + 4 + CELL_PAD_BTN_OFFSET_DIGITAL2 * 2;
++    return ((unsigned)b[0] << 8 | b[1]) & 0x02u ? 1 : 0;
++}
++static int right_mode(void) { return s_pad.last[10]; }
++static int left_mode(void)  { return s_pad.last[21]; }
++static void rumble(int large)
++{
++    CellPadActParam* act = (CellPadActParam*)(vm_base + 0x3000);
++    act->motor[CELL_PAD_ACTUATOR_PARAM_SMALL] = 0;
++    act->motor[CELL_PAD_ACTUATOR_PARAM_LARGE] = (u8)large;
++    assert(cellPadSetActDirect(0, (CellPadActParam*)(uintptr_t)0x3000) == CELL_OK);
++}
++
++int main(void)
++{
++    unsetenv("PS3_PAD_SDL"); unsetenv("PS3_INPUT_MAP"); unsetenv("PS3_INPUT_MODE");
++    unsetenv("PS3_RUMBLE"); unsetenv("PS3_RUMBLE_STRENGTH");
++    unsetenv("PS3_PAD_ADAPTIVE"); unsetenv("PS3_PAD_FIRE_AT");
++    vm_base = mmap(NULL, 0x10000, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANON, -1, 0);
++    assert(vm_base != MAP_FAILED);
++
++    /* A DualSense: the gun click on the right, light resistance on the left. */
++    assert(cellPadInit(4) == CELL_OK);
++    assert(s_adapt[0].on && s_pad.effects == 1);
++    assert(s_pad.last[0] == (0x04 | 0x08));
++    assert(right_mode() == 0x25 && left_mode() == 0x21);
++    assert(s_pad.last[11] == ((1 << 2) | (1 << 5)) && s_pad.last[12] == 0 && s_pad.last[13] == 5);
++
++    /* Pressed only past the break (half way), not at the first touch. */
++    s_pad.rt = 6000;
++    assert(!r2_down());
++    s_pad.rt = 20000;
++    assert(r2_down());
++
++    /* Firing with the motors running: the right trigger buzzes ... */
++    rumble(255);
++    poll_wait(PAD_ADAPT_MIN_GAP_MS + 5);
++    assert(right_mode() == 0x26 && left_mode() == 0x21);
++    assert(s_pad.last[13] == 0xFF && s_pad.last[16] == 0x3F && s_pad.last[19] == 30);   /* amplitude 8 in all ten zones, 30 Hz */
++    const int after_buzz = s_pad.effects;
++    poll_wait(PAD_ADAPT_MIN_GAP_MS + 5);
++    assert(s_pad.effects == after_buzz);                     /* unchanged: nothing re-sent */
++    /* ... and clicks again when the shooting stops. */
++    rumble(0);
++    poll_wait(PAD_ADAPT_MIN_GAP_MS + 5);
++    assert(right_mode() == 0x25);
++    /* Motors running but the trigger let go (a hit, an explosion): a click. */
++    rumble(255);
++    s_pad.rt = 0;
++    poll_wait(PAD_ADAPT_MIN_GAP_MS + 5);
++    assert(right_mode() == 0x25);
++    rumble(0);
++
++    /* Closing frees both triggers. */
++    const int before_end = s_pad.effects;
++    assert(cellPadEnd() == CELL_OK);
++    assert(s_pad.closed && s_pad.effects == before_end + 1);
++    assert(right_mode() == 0x05 && left_mode() == 0x05);
++
++    /* Not a DualSense: no effects, the usual press point. */
++    s_pad.ps5 = 0;
++    const int before_xbox = s_pad.effects;
++    assert(cellPadInit(4) == CELL_OK);
++    assert(!s_adapt[0].on && s_pad.effects == before_xbox);
++    s_pad.rt = 6000;
++    assert(r2_down());
++    assert(cellPadEnd() == CELL_OK && s_pad.effects == before_xbox);
++
++    /* A DualSense that refuses the effect: the same. */
++    s_pad.ps5 = 1; s_pad.refuse = 1;
++    assert(cellPadInit(4) == CELL_OK);
++    assert(!s_adapt[0].on);
++    assert(r2_down());
++    assert(cellPadEnd() == CELL_OK);
++
++    printf("test_pad_adaptive: all passed\n");
++    return 0;
++}
 diff --git a/libs/input/tests/test_pad_hotplug.c b/libs/input/tests/test_pad_hotplug.c
 new file mode 100644
-index 0000000..48d0b09
+index 0000000..f84b23c
 --- /dev/null
 +++ b/libs/input/tests/test_pad_hotplug.c
-@@ -0,0 +1,272 @@
+@@ -0,0 +1,277 @@
 +/* cellPad's SDL controller hot-plug: a controller switched off and on again
 + * (a DualSense over Bluetooth comes back with a new instance id) is opened
 + * again without a restart, into the port it had; a new one goes into a free
@@ -5873,6 +6214,10 @@ index 0000000..48d0b09
 +void spu_lockline_lock(void) {}
 +void spu_lockline_unlock(void) {}
 +u32 cellGcm_flip_request_count(void) { return 0; }
++/* R2's cellPadGetData debug dumps (runtime/ppu), unused here. */
++void ppu_bctrl_ring_dump_all(const char* t) { (void)t; }
++void ppu_dump_inputsys(const char* t) { (void)t; }
++void ppu_statescan_diff(uint32_t a, uint32_t b, const char* t) { (void)a; (void)b; (void)t; }
 +
 +/* ---- the fake SDL ----------------------------------------------------------- */
 +typedef struct {
@@ -5941,6 +6286,7 @@ index 0000000..48d0b09
 +    p->rumble_lo = lo; p->rumble_hi = hi; p->rumble_calls++;
 +    return 0;
 +}
++int SDL_GameControllerSendEffect(SDL_GameController* gc, const void* data, int size) { (void)gc; (void)data; (void)size; return 0; }
 +Uint8 SDL_GameControllerGetButton(SDL_GameController* gc, SDL_GameControllerButton b)
 +{
 +    return (Uint8)((((FakePad*)gc)->buttons >> b) & 1u);

@@ -80,6 +80,13 @@ comes next. Same layout as the Resistance: Fall of Man roadmap.
   more clipping); GPU scene copies; a faster SPU interpreter loop.
 - [x] Clean shutdown on window close and SIGTERM; HDD paths for cellFs and
   trophies; no dropped draws past 8192 records.
+- [x] DualSense adaptive triggers, from the Resistance 1 port (2026-11-11):
+  R2 clicks like a gun's trigger and fires at the click (about half way),
+  buzzes while it is held and the game rumbles; L2 has a light resistance.
+  Other controllers keep free triggers. `PS3_PAD_ADAPTIVE=0` turns it off,
+  `PS3_PAD_FIRE_AT` moves the press point; a switch in the launcher, and a
+  Fire with R2 (PS5 style) button on its Controls page that swaps L1/R1 with
+  L2/R2. Not yet felt on a real DualSense.
 
 ## Next
 
