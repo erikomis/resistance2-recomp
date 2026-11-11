@@ -7003,10 +7003,48 @@ index 2ab88b8..03505a2 100644
      return 0;
  }
 diff --git a/libs/network/cellNetCtl.c b/libs/network/cellNetCtl.c
-index c7926c0..a913b8c 100644
+index c7926c0..3a0a50a 100644
 --- a/libs/network/cellNetCtl.c
 +++ b/libs/network/cellNetCtl.c
-@@ -344,10 +344,18 @@ static void netstart_broadcast(u32 status)
+@@ -222,7 +222,12 @@ s32 cellNetCtlGetInfo(s32 code, CellNetCtlInfo* info)
+         break;
+ 
+     case CELL_NET_CTL_INFO_IP_ADDRESS:
+-        netctl_get_host_ip(info->ip_address, sizeof(info->ip_address));
++        /* PS3_NET_LOCAL_IP=<ip>: the address the title is told it has, instead
++         * of this computer's own LAN address (a title may pass it to its
++         * servers, for peer connections). */
++        { const char* ip = getenv("PS3_NET_LOCAL_IP");
++          if (ip && *ip) strncpy(info->ip_address, ip, sizeof(info->ip_address) - 1);
++          else netctl_get_host_ip(info->ip_address, sizeof(info->ip_address)); }
+         break;
+ 
+     case CELL_NET_CTL_INFO_NETMASK:
+@@ -234,13 +239,20 @@ s32 cellNetCtlGetInfo(s32 code, CellNetCtlInfo* info)
+                 sizeof(info->default_route) - 1);
+         break;
+ 
++    /* PS3_NET_DNS (a community server's DNS, as a console set to a manual
++     * DNS reports it) for both, else the public resolvers as before. The
++     * runtime's own gethostbyname asks it too (sysNet.c). */
+     case CELL_NET_CTL_INFO_PRIMARY_DNS:
+-        strncpy(info->primary_dns, "8.8.8.8", sizeof(info->primary_dns) - 1);
++        { const char* d = getenv("PS3_NET_DNS");
++          strncpy(info->primary_dns, d && *d ? d : "8.8.8.8", sizeof(info->primary_dns) - 1);
++          char* c = strchr(info->primary_dns, ':'); if (c) *c = 0; }
+         break;
+ 
+     case CELL_NET_CTL_INFO_SECONDARY_DNS:
+-        strncpy(info->secondary_dns, "8.8.4.4",
+-                sizeof(info->secondary_dns) - 1);
++        { const char* d = getenv("PS3_NET_DNS");
++          strncpy(info->secondary_dns, d && *d ? d : "8.8.4.4",
++                  sizeof(info->secondary_dns) - 1);
++          char* c = strchr(info->secondary_dns, ':'); if (c) *c = 0; }
+         break;
+ 
+     case CELL_NET_CTL_INFO_IP_CONFIG:
+@@ -344,10 +356,18 @@ static void netstart_broadcast(u32 status)
          cellSysutilQueueEvent(slot, status, 0);
  }
  
@@ -7026,7 +7064,7 @@ index c7926c0..a913b8c 100644
      netstart_broadcast(CELL_SYSUTIL_NET_CTL_NETSTART_LOADED);
      netstart_broadcast(CELL_SYSUTIL_NET_CTL_NETSTART_FINISHED);
      return CELL_OK;
-@@ -361,11 +369,11 @@ s32 cellNetCtlNetStartDialogAbortAsync(void)
+@@ -361,11 +381,11 @@ s32 cellNetCtlNetStartDialogAbortAsync(void)
  
  s32 cellNetCtlNetStartDialogUnloadAsync(CellNetCtlNetStartDialogResult* result)
  {
@@ -7044,34 +7082,180 @@ index c7926c0..a913b8c 100644
      return CELL_OK;
  }
 diff --git a/libs/network/sceNp.c b/libs/network/sceNp.c
-index 697901a..df0ef18 100644
+index 697901a..bbd84db 100644
 --- a/libs/network/sceNp.c
 +++ b/libs/network/sceNp.c
-@@ -274,6 +274,69 @@ s32 sceNpManagerGetOnlineId(SceNpOnlineId* onlineId) { return sceNpGetOnlineId(0
+@@ -9,6 +9,8 @@
+ #include <stdio.h>
+ #include <string.h>
+ #include <stdint.h>
++#include <stdlib.h>
++#include <time.h>
+ #include "../../runtime/ppu/ppu_memory.h"   /* vm_write*: guest EA -> host, byte-swapped */
+ #include "np_psnr.h"
+ #include "../system/cellSysutil.h"
+@@ -225,6 +227,23 @@ s32 sceNpGetMyLanguages(SceNpMyLanguages* langs)
+ static SceNpManagerCallback s_npmgr_cb = NULL;
+ static void*                s_npmgr_cb_arg = NULL;
+ 
++/* Signed in with no psnr server: PS3_NP_SIGNIN=1 together with
++ * PS3_NET_ONLINE=1. For community servers that take the player's name from
++ * the ticket and do not check Sony's signature (the Medius servers revival
++ * projects run, PS Rewired's for Resistance among them); the ticket is made
++ * here (np_local_ticket). Read every time: the tests flip it. */
++static int np_local_signin(void)
++{
++    const char* s = getenv("PS3_NP_SIGNIN");
++    const char* o = getenv("PS3_NET_ONLINE");
++    return s && *s && s[0] != '0' && o && *o && o[0] != '0';
++}
++
++static int np_signed_in(void)
++{
++    return np_psnr_enabled() || np_local_signin();
++}
++
+ s32 sceNpManagerGetStatus(s32* status)
+ {
+     if (!s_np_initialized)
+@@ -236,7 +255,7 @@ s32 sceNpManagerGetStatus(s32* status)
+      * writes to whatever host address shares that number. Same trap as
+      * cellGcmSys had. Tokyo Jungle calls this during its online init. */
+     /* Signed in when there is a psnr server to be signed in to. */
+-    s32 st = np_psnr_enabled() ? SCE_NP_MANAGER_STATUS_ONLINE : SCE_NP_MANAGER_STATUS_OFFLINE;
++    s32 st = np_signed_in() ? SCE_NP_MANAGER_STATUS_ONLINE : SCE_NP_MANAGER_STATUS_OFFLINE;
+     vm_write32((uint32_t)(uintptr_t)status, (uint32_t)st);
+     { static s32 last = -2;
+       if (st != last) printf("[sceNp] ManagerGetStatus() -> %s\n", st < 0 ? "OFFLINE" : "ONLINE");
+@@ -253,7 +272,7 @@ s32 sceNpManagerRegisterCallback(SceNpManagerCallback callback, void* arg)
+     printf("[sceNp] ManagerRegisterCallback()\n");
+     /* Online: tell the title it is signed in, as the console does once the
+      * manager reaches ONLINE. Delivered on its next cellSysutilCheckCallback. */
+-    if (np_psnr_enabled() && callback) {
++    if (np_signed_in() && callback) {
+         const u64 args[8] = { (u64)(u32)SCE_NP_MANAGER_STATUS_ONLINE, 0,
+                               (u64)(u32)(uintptr_t)arg, 0, 0, 0, 0, 0 };
+         cellSysutilQueueGuestCallbackArgs((u32)(uintptr_t)callback, args);
+@@ -274,6 +293,190 @@ s32 sceNpManagerGetOnlineId(SceNpOnlineId* onlineId) { return sceNpGetOnlineId(0
  s32 sceNpManagerGetOnlineName(SceNpOnlineName* name) { return sceNpGetOnlineName(0, name); }
  s32 sceNpManagerGetAccountAge(s32* age)              { return sceNpGetAccountAge(0, age); }
  
 +/* Tickets: the signed proof of sign-in a title hands its own servers (Resistance
-+ * requests one when Multiplayer > Online Game starts). There is no ticket
-+ * service here. Offline -- the manager says OFFLINE -- RequestTicket fails with
-+ * SCE_NP_ERROR_OFFLINE, as the console and RPCS3 do; unresolved it answered
++ * requests one when Multiplayer > Online Game starts and passes it to the
++ * Medius login). Offline -- the manager says OFFLINE -- RequestTicket fails
++ * with SCE_NP_ERROR_OFFLINE, as the console does; unresolved it answered
 + * CELL_OK and the title waited for a GOT_TICKET event that never came. With a
-+ * psnr server the request is still accepted, as before, for titles that do
-+ * not wait on it. Either way no ticket ever arrives: GetTicket reports an empty
-+ * one and GetTicketParam INVALID_STATE. */
++ * psnr server the request is accepted and no ticket comes (psnr has no ticket
++ * service). With PS3_NP_SIGNIN a ticket is made here and announced with the
++ * manager's GOT_TICKET event.
++ *
++ * The local ticket is version 2.1: an 8-byte header (version, size of the
++ * rest), a body section and a footer section, each a run of typed fields
++ * (be16 type, be16 length, data). Medius servers read the online ID and the
++ * service ID at fixed offsets (84 and 136 bytes in), which this layout puts
++ * where a console's ticket has them. The signature is zero: no server that
++ * checks Sony's signature will take it. */
++#define SCE_NP_MANAGER_EVENT_GOT_TICKET 255
++#define NP_TICKET_MAX 512
++
++static u8  s_ticket[NP_TICKET_MAX];
++static u32 s_ticket_size = 0;
++static struct {
++    u8  serial[20];
++    u32 issuer;
++    u64 issued, expires, user_id;
++    char online_id[32];
++    u8  region[4];
++    char domain[4];
++    char service[24];
++    u32 status;
++} s_tk;
++
++static u32 tk_field(u8* p, u16 type, const void* data, u16 len)
++{
++    p[0] = (u8)(type >> 8); p[1] = (u8)type; p[2] = (u8)(len >> 8); p[3] = (u8)len;
++    if (len) memcpy(p + 4, data, len);
++    return 4u + len;
++}
++static void tk_be32(u8* p, u32 v) { p[0] = (u8)(v >> 24); p[1] = (u8)(v >> 16); p[2] = (u8)(v >> 8); p[3] = (u8)v; }
++static void tk_be64(u8* p, u64 v) { tk_be32(p, (u32)(v >> 32)); tk_be32(p + 4, (u32)v); }
++
++static u64 np_now_ms(void)
++{
++    struct timespec ts;
++    timespec_get(&ts, TIME_UTC);
++    return (u64)ts.tv_sec * 1000u + (u64)(ts.tv_nsec / 1000000);
++}
++
++/* Build the ticket for `service` (the title's service ID) into s_ticket. */
++u32 np_local_ticket(const char* service)
++{
++    memset(&s_tk, 0, sizeof s_tk);
++    const char* id = np_psnr_online_id();
++    strncpy(s_tk.online_id, id, sizeof s_tk.online_id - 1);
++    u64 h = 1469598103934665603ull;                 /* FNV-1a of the online ID */
++    for (const char* c = id; *c; c++) { h ^= (u8)*c; h *= 1099511628211ull; }
++    s_tk.user_id = h & 0x7FFFFFFFFFFFFFFFull;
++    s_tk.issued  = np_now_ms();
++    s_tk.expires = s_tk.issued + 10u * 60u * 1000u;   /* ten minutes */
++    for (int i = 0; i < 8; i++) s_tk.serial[i] = (u8)(s_tk.issued >> (56 - 8 * i));
++    for (int i = 8; i < 16; i++) s_tk.serial[i] = (u8)(h >> (8 * (i - 8)));
++    s_tk.issuer = 0x100;
++    memcpy(s_tk.region, "us\0\0", 4);
++    memcpy(s_tk.domain, "un\0\0", 4);
++    if (service) strncpy(s_tk.service, service, sizeof s_tk.service);
++    s_tk.status = 0;
++
++    u8 body[400], foot[80], v[8];
++    u32 b = 0, f = 0;
++    b += tk_field(body + b, 0x0008, s_tk.serial, 20);
++    tk_be32(v, s_tk.issuer);   b += tk_field(body + b, 0x0001, v, 4);
++    tk_be64(v, s_tk.issued);   b += tk_field(body + b, 0x0007, v, 8);
++    tk_be64(v, s_tk.expires);  b += tk_field(body + b, 0x0007, v, 8);
++    tk_be64(v, s_tk.user_id);  b += tk_field(body + b, 0x0002, v, 8);
++    b += tk_field(body + b, 0x0004, s_tk.online_id, 32);
++    b += tk_field(body + b, 0x0008, s_tk.region, 4);
++    b += tk_field(body + b, 0x0004, s_tk.domain, 4);
++    b += tk_field(body + b, 0x0008, s_tk.service, 24);
++    tk_be32(v, s_tk.status);   b += tk_field(body + b, 0x0001, v, 4);
++    b += tk_field(body + b, 0x0000, NULL, 0);          /* status duration: none */
++    b += tk_field(body + b, 0x0000, NULL, 0);          /* date of birth: none */
++    static const u8 zero[56] = { 0 };
++    f += tk_field(foot + f, 0x0008, zero, 4);          /* cipher ID */
++    f += tk_field(foot + f, 0x0008, zero, 56);         /* signature (none) */
++
++    u32 n = 8;
++    n += tk_field(s_ticket + n, 0x3000, body, (u16)b);
++    n += tk_field(s_ticket + n, 0x3002, foot, (u16)f);
++    tk_be32(s_ticket, 0x21010000u);                    /* version 2.1 */
++    tk_be32(s_ticket + 4, n - 8);
++    s_ticket_size = n;
++    return n;
++}
++
 +static s32 np_request_ticket(const char* fn, u32 npId, u32 serviceId, u32 cookieSize)
 +{
 +    if (!s_np_initialized)
 +        return SCE_NP_ERROR_NOT_INITIALIZED;
 +    if (!npId || !serviceId || cookieSize > SCE_NP_COOKIE_MAX_SIZE)
 +        return SCE_NP_AUTH_EINVALID_ARGUMENT;
++    const char* svc = (const char*)(vm_base + serviceId);
++    if (np_local_signin()) {
++        const u32 n = np_local_ticket(svc);
++        printf("[sceNp] %s(service='%s') -> local ticket, %u bytes, online ID '%s'\n",
++               fn, svc, n, s_tk.online_id);
++        if (s_npmgr_cb) {
++            const u64 args[8] = { (u64)(u32)SCE_NP_MANAGER_EVENT_GOT_TICKET, (u64)n,
++                                  (u64)(u32)(uintptr_t)s_npmgr_cb_arg, 0, 0, 0, 0, 0 };
++            cellSysutilQueueGuestCallbackArgs((u32)(uintptr_t)s_npmgr_cb, args);
++        }
++        return CELL_OK;
++    }
 +    if (!np_psnr_enabled()) {
-+        printf("[sceNp] %s(service='%s') -> OFFLINE\n", fn,
-+               (const char*)(vm_base + serviceId));
++        printf("[sceNp] %s(service='%s') -> OFFLINE\n", fn, svc);
 +        return SCE_NP_ERROR_OFFLINE;
 +    }
-+    printf("[sceNp] %s(service='%s') -> accepted, no ticket service\n", fn,
-+           (const char*)(vm_base + serviceId));
++    printf("[sceNp] %s(service='%s') -> accepted, no ticket service\n", fn, svc);
 +    return CELL_OK;
 +}
 +
@@ -7094,24 +7278,50 @@ index 697901a..df0ef18 100644
 +                             (u32)(uintptr_t)serviceId, cookieSize);
 +}
 +
++/* No buffer: the size it needs. A buffer: the ticket, when it fits. */
 +s32 sceNpManagerGetTicket(void* buffer, u32* bufferSize)
 +{
-+    (void)buffer;
 +    if (!s_np_initialized)
 +        return SCE_NP_ERROR_NOT_INITIALIZED;
 +    if (!bufferSize)
 +        return SCE_NP_ERROR_INVALID_ARGUMENT;
-+    vm_write32((u32)(uintptr_t)bufferSize, 0);   /* no ticket: zero bytes */
++    const u32 have = vm_read32((u32)(uintptr_t)bufferSize);
++    if (buffer && s_ticket_size) {
++        if (have < s_ticket_size) return SCE_NP_ERROR_INVALID_ARGUMENT;
++        memcpy(vm_base + (u32)(uintptr_t)buffer, s_ticket, s_ticket_size);
++    }
++    vm_write32((u32)(uintptr_t)bufferSize, s_ticket_size);   /* 0: no ticket */
 +    return CELL_OK;
 +}
 +
++/* One field of the ticket (SceNpTicketParam: a 256-byte union, big-endian
++ * integers, SceNpDate for the date of birth). */
 +s32 sceNpManagerGetTicketParam(s32 paramId, void* param)
 +{
 +    if (!s_np_initialized)
 +        return SCE_NP_ERROR_NOT_INITIALIZED;
 +    if (!param || paramId < 0 || paramId > 11)   /* SERIAL_ID .. SUBJECT_DOB */
 +        return SCE_NP_ERROR_INVALID_ARGUMENT;
-+    return SCE_NP_ERROR_INVALID_STATE;
++    if (!s_ticket_size)
++        return SCE_NP_ERROR_INVALID_STATE;
++    const u32 ea = (u32)(uintptr_t)param;
++    u8* p = vm_base + ea;
++    memset(p, 0, 256);
++    switch (paramId) {
++    case 0:  memcpy(p, s_tk.serial, 20); break;                      /* SERIAL_ID */
++    case 1:  vm_write32(ea, s_tk.issuer); break;                     /* ISSUER_ID */
++    case 2:  tk_be64(p, s_tk.issued); break;                         /* ISSUED_DATE */
++    case 3:  tk_be64(p, s_tk.expires); break;                        /* EXPIRE_DATE */
++    case 4:  tk_be64(p, s_tk.user_id); break;                        /* SUBJECT_ACCOUNT_ID */
++    case 5:  memcpy(p, s_tk.online_id, 32); break;                   /* SUBJECT_ONLINE_ID */
++    case 6:  memcpy(p, s_tk.region, 4); break;                       /* SUBJECT_REGION */
++    case 7:  memcpy(p, s_tk.domain, 4); break;                       /* SUBJECT_DOMAIN */
++    case 8:  memcpy(p, s_tk.service, 24); break;                     /* SERVICE_ID */
++    case 9:  vm_write32(ea, s_tk.status); break;                     /* SUBJECT_STATUS */
++    case 10: break;                                                  /* STATUS_DURATION: 0 */
++    case 11: p[0] = 0x07; p[1] = 0xC6; p[2] = 1; p[3] = 1; break;    /* SUBJECT_DOB: 1990-01-01 */
++    }
++    return CELL_OK;
 +}
 +
  /* Parental controls: an unrestricted adult account. Unimplemented, these
@@ -7213,6 +7423,317 @@ index d956e6d..fe1c179 100644
  }
  
  static u32 trophy_count_unlocked(TrophyContext* ctx)
+diff --git a/libs/network/sysNet.c b/libs/network/sysNet.c
+index 87595f3..dbb94d6 100644
+--- a/libs/network/sysNet.c
++++ b/libs/network/sysNet.c
+@@ -25,6 +25,7 @@
+     #define HOST_SOCKET_ERROR   SOCKET_ERROR
+     #define host_closesocket    closesocket
+     #define host_poll           WSAPoll
++    #define strncasecmp         _strnicmp
+ #else
+     #include <sys/types.h>
+     #include <sys/socket.h>
+@@ -38,6 +39,7 @@
+     #include <poll.h>
+     #include <time.h>
+     #include <sys/time.h>
++    #include <strings.h>
+     typedef int host_socket_t;
+     typedef struct pollfd host_pollfd;
+     #define HOST_INVALID_SOCKET (-1)
+@@ -506,6 +508,32 @@ int32_t sys_net_bnet_accept(int32_t s, sys_net_sockaddr* addr, uint32_t* addrlen
+     return slot;
+ }
+ 
++/* PS3_NET_ALLOW=ip[,ip...]: the only addresses a title may connect or send
++ * to (loopback always may); anything else is refused and logged. For trying
++ * a community server without the title reaching anything else. */
++static int net_allowed(const struct in_addr* a)
++{
++    const char* list = getenv("PS3_NET_ALLOW");
++    if (!list || !*list) return 1;
++    if ((ntohl(a->s_addr) >> 24) == 127) return 1;
++    for (const char* p = list; *p;) {
++        while (*p == ',' || *p == ' ') p++;
++        const char* e = p;
++        while (*e && *e != ',' && *e != ' ') e++;
++        char buf[16];
++        const size_t n = (size_t)(e - p);
++        struct in_addr x;
++        if (n > 0 && n < sizeof buf) {
++            memcpy(buf, p, n); buf[n] = 0;
++            if (inet_pton(AF_INET, buf, &x) == 1 && x.s_addr == a->s_addr) return 1;
++        }
++        p = e;
++    }
++    char ip[16];
++    printf("[sys_net] %s blocked (not in PS3_NET_ALLOW)\n", inet_ntop(AF_INET, a, ip, sizeof ip) ? ip : "?");
++    return 0;
++}
++
+ int32_t sys_net_bnet_connect(int32_t s, const sys_net_sockaddr* addr, uint32_t addrlen)
+ {
+     (void)addrlen;
+@@ -523,6 +551,7 @@ int32_t sys_net_bnet_connect(int32_t s, const sys_net_sockaddr* addr, uint32_t a
+ 
+     char ip[16];
+     printf("[sys_net] connect(%d, %s:%u)\n", s, ip_str(&a.sin_addr, ip), ntohs(a.sin_port));
++    if (!net_allowed(&a.sin_addr)) return fail(SYS_NET_ECONNREFUSED);
+     if (s_sockets[s].p2p && s_sockets[s].stream) {
+         /* A peer that can't take a direct connection (behind its router):
+          * the stream goes through psnr's relay, and its socket replaces
+@@ -611,6 +640,25 @@ int32_t sys_net_bnet_send(int32_t s, const void* buf, uint32_t len, int32_t flag
+     return n == HOST_SOCKET_ERROR ? host_fail() : n;
+ }
+ 
++/* PS3_NET_DNS=ip:port with a port other than 53: a title's own DNS client
++ * (Resistance has one; it asks the DNS cellNetCtl reports, on port 53) is
++ * sent to that port instead, and the answer comes back looking like port 53.
++ * For a DNS server that cannot bind 53, such as a test's. 0 when unused. */
++static int net_dns_redirect(struct in_addr* ip, uint16_t* port)
++{
++    const char* d = getenv("PS3_NET_DNS");
++    const char* c = d ? strchr(d, ':') : NULL;
++    if (!c) return 0;
++    char addr[24];
++    const size_t an = (size_t)(c - d);
++    if (an == 0 || an >= sizeof addr) return 0;
++    memcpy(addr, d, an); addr[an] = 0;
++    const long p = strtol(c + 1, NULL, 10);
++    if (p <= 0 || p > 65535 || p == 53 || inet_pton(AF_INET, addr, ip) != 1) return 0;
++    *port = (uint16_t)p;
++    return 1;
++}
++
+ int32_t sys_net_bnet_sendto(int32_t s, const void* buf, uint32_t len, int32_t flags,
+                             const sys_net_sockaddr* to, uint32_t tolen)
+ {
+@@ -619,6 +667,21 @@ int32_t sys_net_bnet_sendto(int32_t s, const void* buf, uint32_t len, int32_t fl
+     if (!valid_socket(s)) return fail(SYS_NET_EBADF);
+     if (!to) return sys_net_bnet_send(s, buf, len, flags);   /* connected socket */
+     if (read_sockaddr(EA(to), &a)) return fail(SYS_NET_EINVAL);
++    { struct in_addr dip; uint16_t dport;
++      if (ntohs(a.sin_port) == 53 && net_dns_redirect(&dip, &dport) && a.sin_addr.s_addr == dip.s_addr)
++          a.sin_port = htons(dport); }
++    /* PS3_NET_NO_UPNP=1: UPnP discovery (SSDP, 239.255.255.250:1900) is
++     * dropped as if sent, so a title cannot ask the player's router to open
++     * ports. */
++    if (ntohs(a.sin_port) == 1900 && a.sin_addr.s_addr == htonl(0xEFFFFFFAu)) {
++        const char* nu = getenv("PS3_NET_NO_UPNP");
++        if (nu && *nu && nu[0] != '0') {
++            static int _n = 0;
++            if (_n++ < 4) printf("[sys_net] sendto(%d) UPnP discovery dropped (PS3_NET_NO_UPNP)\n", s);
++            return (int32_t)len;
++        }
++    }
++    if (!net_allowed(&a.sin_addr)) return (int32_t)len;   /* dropped, as if sent */
+     if (s_sockets[s].p2p && np_psnr_p2p_route(GUEST_PTR(EA(buf), const char*), len,
+                                              (const uint8_t*)&a.sin_addr, ntohs(a.sin_port)))
+         return (int32_t)len;   /* went through psnr's relay */
+@@ -665,6 +728,9 @@ int32_t sys_net_bnet_recvfrom(int32_t s, void* buf, uint32_t len, int32_t flags,
+         }
+         break;
+     } while (1);
++    { struct in_addr dip; uint16_t dport;
++      if (net_dns_redirect(&dip, &dport) && a.sin_addr.s_addr == dip.s_addr && ntohs(a.sin_port) == dport)
++          a.sin_port = htons(53); }
+     if (net_trace()) trace("recvfrom", s, n, &a);
+     write_sockaddr(EA(from), EA(fromlen), &a);
+     if (from && s_sockets[s].p2p) vm_write16(EA(from) + 8, s_sockets[s].vport);
+@@ -983,6 +1049,124 @@ uint32_t sys_net_bnet_inet_ntoa(uint32_t addr)
+     return ea;
+ }
+ 
++/* Name lookups for community servers.
++ *
++ * Revival projects reach a title's old servers through DNS: a console set to
++ * their DNS server gets their address back for Sony's old host names (PS
++ * Rewired answers Resistance's resistance.ps3.online.scea.com this way). The
++ * same two ways, both off by default:
++ *   PS3_NET_HOSTS=name=ip[,name=ip...]  fixed answers; "*.suffix" matches
++ *                                       every name under it, "*" any name
++ *   PS3_NET_DNS=<ipv4>[:port]           ask that DNS server (UDP, port 53
++ *                                       by default) instead of the host's
++ *                                       resolver
++ * PS3_NET_HOSTS is asked first. With neither, the host's getaddrinfo, as
++ * before. */
++static int net_name_matches(const char* pat, size_t pn, const char* host)
++{
++    if (pn == 1 && pat[0] == '*') return 1;
++    const size_t hn = strlen(host);
++    if (pn > 2 && pat[0] == '*' && pat[1] == '.') {
++        const size_t sn = pn - 1;   /* ".suffix" */
++        return hn > sn && strncasecmp(host + hn - sn, pat + 1, sn) == 0;
++    }
++    return pn == hn && strncasecmp(host, pat, pn) == 0;
++}
++
++int sys_net_hosts_lookup(const char* list, const char* host, struct in_addr* out)
++{
++    if (!list || !host) return 0;
++    const char* p = list;
++    while (*p) {
++        while (*p == ',' || *p == ';' || *p == ' ') p++;
++        const char* eq = p;
++        while (*eq && *eq != '=' && *eq != ',' && *eq != ';') eq++;
++        if (*eq != '=') { p = eq; continue; }
++        const char* ip = eq + 1;
++        const char* end = ip;
++        while (*end && *end != ',' && *end != ';' && *end != ' ') end++;
++        char buf[16];
++        const size_t n = (size_t)(end - ip);
++        if (n > 0 && n < sizeof buf && net_name_matches(p, (size_t)(eq - p), host)) {
++            memcpy(buf, ip, n); buf[n] = 0;
++            if (inet_pton(AF_INET, buf, out) == 1) return 1;
++        }
++        p = end;
++    }
++    return 0;
++}
++
++/* One A query, two tries of 2 s. 1 with an address, 0 with none. */
++int sys_net_dns_query(const char* server, const char* host, struct in_addr* out)
++{
++    struct sockaddr_in sa;
++    memset(&sa, 0, sizeof sa);
++    sa.sin_family = AF_INET;
++    sa.sin_port = htons(53);
++    if (!server || !host) return 0;
++    char addr[24];
++    const char* colon = strchr(server, ':');           /* "ip[:port]" */
++    const size_t an = colon ? (size_t)(colon - server) : strlen(server);
++    if (an == 0 || an >= sizeof addr) return 0;
++    memcpy(addr, server, an); addr[an] = 0;
++    if (colon) {
++        const long port = strtol(colon + 1, NULL, 10);
++        if (port <= 0 || port > 65535) return 0;
++        sa.sin_port = htons((uint16_t)port);
++    }
++    if (inet_pton(AF_INET, addr, &sa.sin_addr) != 1) return 0;
++    uint8_t q[300];
++    const uint16_t id = (uint16_t)(rand() & 0xFFFF);
++    size_t n = 0;
++    q[n++] = id >> 8; q[n++] = id & 0xFF;
++    q[n++] = 0x01; q[n++] = 0x00;                    /* recursion desired */
++    q[n++] = 0; q[n++] = 1; memset(q + n, 0, 6); n += 6;   /* one question */
++    for (const char* l = host; *l;) {
++        const char* dot = strchr(l, '.');
++        const size_t len = dot ? (size_t)(dot - l) : strlen(l);
++        if (len == 0 || len > 63 || n + len + 6 > sizeof q) return 0;
++        q[n++] = (uint8_t)len; memcpy(q + n, l, len); n += len;
++        l += len; if (*l == '.') l++;
++    }
++    q[n++] = 0;
++    q[n++] = 0; q[n++] = 1; q[n++] = 0; q[n++] = 1;  /* A, IN */
++
++    host_socket_t s = socket(AF_INET, SOCK_DGRAM, 0);
++    if (s == HOST_INVALID_SOCKET) return 0;
++#ifdef _WIN32
++    DWORD tmo = 2000;
++#else
++    struct timeval tmo = { 2, 0 };
++#endif
++    setsockopt(s, SOL_SOCKET, SO_RCVTIMEO, (const char*)&tmo, sizeof tmo);
++    int found = 0;
++    for (int attempt = 0; attempt < 2 && !found; attempt++) {
++        if (sendto(s, (const char*)q, (int)n, 0, (const struct sockaddr*)&sa, sizeof sa) != (int)n) break;
++        uint8_t r[1500];
++        const int got = (int)recvfrom(s, (char*)r, sizeof r, 0, NULL, NULL);
++        if (got < 12 || r[0] != q[0] || r[1] != q[1] || (r[3] & 0x0F) != 0) continue;
++        const int qd = (r[4] << 8) | r[5], an = (r[6] << 8) | r[7];
++        int o = 12;
++        for (int i = 0; i < qd && o < got; i++) {             /* skip the question(s) */
++            while (o < got && r[o] && (r[o] & 0xC0) != 0xC0) o += r[o] + 1;
++            o += (o < got && (r[o] & 0xC0) == 0xC0) ? 2 : 1;
++            o += 4;
++        }
++        for (int i = 0; i < an && o + 10 <= got; i++) {
++            while (o < got && r[o] && (r[o] & 0xC0) != 0xC0) o += r[o] + 1;   /* owner name */
++            o += (o < got && (r[o] & 0xC0) == 0xC0) ? 2 : 1;
++            if (o + 10 > got) break;
++            const int type = (r[o] << 8) | r[o + 1], rdlen = (r[o + 8] << 8) | r[o + 9];
++            o += 10;
++            if (o + rdlen > got) break;
++            if (type == 1 && rdlen == 4) { memcpy(&out->s_addr, r + o, 4); found = 1; break; }
++            o += rdlen;
++        }
++    }
++    host_closesocket(s);
++    return found;
++}
++
+ uint32_t sys_net_bnet_gethostbyname(const char* name)
+ {
+     const char* host = GUEST_PTR(EA(name), const char*);
+@@ -990,14 +1174,30 @@ uint32_t sys_net_bnet_gethostbyname(const char* name)
+     struct addrinfo hints, *res = NULL;
+     if (!host || !h) return 0;
+ 
+-    memset(&hints, 0, sizeof(hints));
+-    hints.ai_family = AF_INET;
+-    if (getaddrinfo(host, NULL, &hints, &res) != 0 || !res) {
+-        printf("[sys_net] gethostbyname('%s') failed\n", host);
+-        if (scratch(&s_h_errno_ea, 4)) vm_write32(s_h_errno_ea, SYS_NET_HOST_NOT_FOUND);
+-        return 0;
++    struct in_addr fixed;
++    const char* via = NULL;
++    const char* dns = getenv("PS3_NET_DNS");
++    if (sys_net_hosts_lookup(getenv("PS3_NET_HOSTS"), host, &fixed)) via = "PS3_NET_HOSTS";
++    else if (dns && *dns) {
++        if (!sys_net_dns_query(dns, host, &fixed)) {
++            printf("[sys_net] gethostbyname('%s') failed (DNS %s)\n", host, dns);
++            if (scratch(&s_h_errno_ea, 4)) vm_write32(s_h_errno_ea, SYS_NET_HOST_NOT_FOUND);
++            return 0;
++        }
++        via = "PS3_NET_DNS";
++    } else {
++        memset(&hints, 0, sizeof(hints));
++        hints.ai_family = AF_INET;
++        if (getaddrinfo(host, NULL, &hints, &res) != 0 || !res) {
++            printf("[sys_net] gethostbyname('%s') failed\n", host);
++            if (scratch(&s_h_errno_ea, 4)) vm_write32(s_h_errno_ea, SYS_NET_HOST_NOT_FOUND);
++            return 0;
++        }
+     }
+-    const struct sockaddr_in* sa = (const struct sockaddr_in*)res->ai_addr;
++    struct sockaddr_in fixed_sa;
++    memset(&fixed_sa, 0, sizeof fixed_sa);
++    fixed_sa.sin_addr = fixed;
++    const struct sockaddr_in* sa = via ? &fixed_sa : (const struct sockaddr_in*)res->ai_addr;
+ 
+     memset(vm_ptr8(h), 0, HOSTENT_SCRATCH);
+     vm_write32(h + 0,  h + 64);           /* h_name */
+@@ -1010,8 +1210,9 @@ uint32_t sys_net_bnet_gethostbyname(const char* name)
+     strncpy((char*)vm_ptr8(h + 64), host, HOSTENT_SCRATCH - 65);
+ 
+     char ip[16];
+-    printf("[sys_net] gethostbyname('%s') -> %s\n", host, ip_str(&sa->sin_addr, ip));
+-    freeaddrinfo(res);
++    printf("[sys_net] gethostbyname('%s') -> %s%s%s\n", host, ip_str(&sa->sin_addr, ip),
++           via ? " via " : "", via ? via : "");
++    if (res) freeaddrinfo(res);
+     return h;
+ }
+ 
+diff --git a/libs/network/sysNet.h b/libs/network/sysNet.h
+index 0704b5e..1db96a3 100644
+--- a/libs/network/sysNet.h
++++ b/libs/network/sysNet.h
+@@ -178,6 +178,12 @@ int32_t  sys_net_bnet_inet_aton(const char* cp, uint32_t* inp);
+ uint32_t sys_net_bnet_inet_addr(const char* cp);
+ uint32_t sys_net_bnet_inet_ntoa(uint32_t addr);
+ uint32_t sys_net_bnet_gethostbyname(const char* name);
++/* PS3_NET_HOSTS / PS3_NET_DNS (see sysNet.c): a fixed answer from a
++ * "name=ip,..." list, and one A query to a given DNS server. 1 with an
++ * address in *out, 0 without. */
++struct in_addr;
++int sys_net_hosts_lookup(const char* list, const char* host, struct in_addr* out);
++int sys_net_dns_query(const char* server, const char* host, struct in_addr* out);
+ 
+ /* Guest address of the errno cell. */
+ uint32_t sys_net_errno_loc(void);
 diff --git a/libs/network/tests/test_netstart_offline.c b/libs/network/tests/test_netstart_offline.c
 new file mode 100644
 index 0000000..8e3902b
@@ -7278,6 +7799,124 @@ index 0000000..8e3902b
 +
 +    free(vm_base);
 +    puts("test_netstart_offline: all passed");
++    return 0;
++}
+diff --git a/libs/network/tests/test_np_ticket_local.c b/libs/network/tests/test_np_ticket_local.c
+new file mode 100644
+index 0000000..103b571
+--- /dev/null
++++ b/libs/network/tests/test_np_ticket_local.c
+@@ -0,0 +1,112 @@
++/* PS3_NP_SIGNIN=1 with PS3_NET_ONLINE=1: signed in with no psnr server, for
++ * community Medius servers. The manager reports ONLINE, RequestTicket makes a
++ * version 2.1 ticket and announces it with GOT_TICKET (255, the size as the
++ * result), GetTicket hands it over, and the online ID and service ID sit
++ * where a Medius server reads them (84 and 136 bytes in). Without PS3_NET_ONLINE
++ * nothing changes: offline as before.
++ *
++ *   cc -std=gnu17 -I include -o /tmp/test_np_ticket_local \
++ *      libs/network/tests/test_np_ticket_local.c && /tmp/test_np_ticket_local
++ */
++#include "../sceNp.c"
++#include <assert.h>
++#include <stdlib.h>
++
++uint8_t* vm_base;
++uint32_t ppu_vm_size;
++int g_resv_store_active;
++uint32_t g_ww_lo, g_ww_hi;
++void ppu_resv_break_store(uint64_t ea) { (void)ea; }
++void ps3_ww_report_inline(uint32_t a, uint64_t v, int w) { (void)a; (void)v; (void)w; }
++int spu_coh_is_reserved(uint32_t a) { (void)a; return 0; }
++void spu_coh_notify_write(uint32_t a) { (void)a; }
++void spu_lockline_lock(void) {}
++void spu_lockline_unlock(void) {}
++
++int np_psnr_enabled(void) { return 0; }
++const char* np_psnr_online_id(void) { return "Resident_01"; }
++void edat_add_klicensee(const uint8_t klic[16]) { (void)klic; }
++
++static int s_queued;
++static u64 s_args[8];
++static u32 s_opd;
++s32 cellSysutilQueueGuestCallbackArgs(u32 opd, const u64 args[8])
++{
++    s_opd = opd; memcpy(s_args, args, sizeof s_args); s_queued++;
++    return 0;
++}
++
++#define NPID   0x1000u
++#define SVC    0x2000u
++#define SIZE   0x3000u
++#define PARAM  0x3100u
++#define TICKET 0x4000u
++#define CB     0x5000u
++#define CBARG  0x6000u
++
++static u32 be32(const u8* p) { return ((u32)p[0] << 24) | ((u32)p[1] << 16) | ((u32)p[2] << 8) | p[3]; }
++
++int main(void)
++{
++    vm_base = calloc(1, 0x10000); assert(vm_base);
++    memcpy(vm_base + SVC, "UP9000-BCUS98107_00", 20);
++    assert(sceNpInit(0, NULL) == CELL_OK);
++
++    /* PS3_NP_SIGNIN alone is not enough: still offline. */
++    setenv("PS3_NP_SIGNIN", "1", 1);
++    unsetenv("PS3_NET_ONLINE");
++    assert(sceNpManagerRequestTicket((const SceNpId*)(uintptr_t)NPID, (const char*)(uintptr_t)SVC,
++                                     NULL, 0, NULL, 0) == (s32)SCE_NP_ERROR_OFFLINE);
++    assert(sceNpManagerGetStatus((s32*)(uintptr_t)SIZE) == CELL_OK);
++    assert((s32)vm_read32(SIZE) == SCE_NP_MANAGER_STATUS_OFFLINE);
++
++    setenv("PS3_NET_ONLINE", "1", 1);
++    assert(sceNpManagerGetStatus((s32*)(uintptr_t)SIZE) == CELL_OK);
++    assert((s32)vm_read32(SIZE) == SCE_NP_MANAGER_STATUS_ONLINE);
++
++    /* Registering tells the title it is signed in. */
++    assert(sceNpManagerRegisterCallback((SceNpManagerCallback)(uintptr_t)CB, (void*)(uintptr_t)CBARG) == CELL_OK);
++    assert(s_queued == 1 && s_opd == CB && (s32)s_args[0] == SCE_NP_MANAGER_STATUS_ONLINE);
++
++    /* No ticket yet. */
++    assert(sceNpManagerGetTicketParam(5, (void*)(uintptr_t)PARAM) == (s32)SCE_NP_ERROR_INVALID_STATE);
++    vm_write32(SIZE, 0);
++    assert(sceNpManagerGetTicket(NULL, (u32*)(uintptr_t)SIZE) == CELL_OK && vm_read32(SIZE) == 0);
++
++    /* The request: GOT_TICKET with the size, then the ticket itself. */
++    assert(sceNpManagerRequestTicket((const SceNpId*)(uintptr_t)NPID, (const char*)(uintptr_t)SVC,
++                                     NULL, 0, NULL, 0) == CELL_OK);
++    assert(s_queued == 2 && s_opd == CB);
++    assert(s_args[0] == 255 && s_args[2] == CBARG);
++    const u32 n = (u32)s_args[1];
++    assert(n > 140 && n <= NP_TICKET_MAX);
++
++    vm_write32(SIZE, 0);
++    assert(sceNpManagerGetTicket(NULL, (u32*)(uintptr_t)SIZE) == CELL_OK && vm_read32(SIZE) == n);
++    vm_write32(SIZE, n - 1);
++    assert(sceNpManagerGetTicket((void*)(uintptr_t)TICKET, (u32*)(uintptr_t)SIZE) == (s32)SCE_NP_ERROR_INVALID_ARGUMENT);
++    vm_write32(SIZE, 1024);
++    assert(sceNpManagerGetTicket((void*)(uintptr_t)TICKET, (u32*)(uintptr_t)SIZE) == CELL_OK && vm_read32(SIZE) == n);
++
++    const u8* t = vm_base + TICKET;
++    assert(be32(t) == 0x21010000u && be32(t + 4) == n - 8);       /* version 2.1, size of the rest */
++    assert(t[8] == 0x30 && t[9] == 0x00);                          /* the body section */
++    assert(be32(t + 80) == 0x00040020u);                           /* online ID: string, 32 bytes */
++    assert(!strcmp((const char*)t + 84, "Resident_01"));
++    assert(be32(t + 132) == 0x00080018u);                          /* service ID: binary, 24 bytes */
++    assert(!strcmp((const char*)t + 136, "UP9000-BCUS98107_00"));
++    const u32 body = ((u32)t[10] << 8) | t[11];
++    assert(t[12 + body] == 0x30 && t[13 + body] == 0x02);          /* then the footer */
++    assert(12 + body + 4 + (((u32)t[14 + body] << 8) | t[15 + body]) == n);
++
++    /* The fields a title can ask for. */
++    assert(sceNpManagerGetTicketParam(5, (void*)(uintptr_t)PARAM) == CELL_OK);
++    assert(!strcmp((const char*)vm_base + PARAM, "Resident_01"));
++    assert(sceNpManagerGetTicketParam(8, (void*)(uintptr_t)PARAM) == CELL_OK);
++    assert(!strcmp((const char*)vm_base + PARAM, "UP9000-BCUS98107_00"));
++    assert(sceNpManagerGetTicketParam(1, (void*)(uintptr_t)PARAM) == CELL_OK && vm_read32(PARAM) == 0x100);
++    assert(sceNpManagerGetTicketParam(12, (void*)(uintptr_t)PARAM) == (s32)SCE_NP_ERROR_INVALID_ARGUMENT);
++
++    printf("test_np_ticket_local: all passed (%u-byte ticket)\n", n);
 +    return 0;
 +}
 diff --git a/libs/network/tests/test_np_ticket_offline.c b/libs/network/tests/test_np_ticket_offline.c
@@ -7365,6 +8004,99 @@ index 0000000..7835583
 +    puts("test_np_ticket_offline: all passed");
 +    return 0;
 +}
+diff --git a/libs/network/tests/test_sys_net.c b/libs/network/tests/test_sys_net.c
+index e9f7888..2e814ad 100644
+--- a/libs/network/tests/test_sys_net.c
++++ b/libs/network/tests/test_sys_net.c
+@@ -107,10 +107,88 @@ static void put_sockaddr(uint32_t ea, uint32_t ip_be, uint16_t port)
+     vm_write32(ea + 4, ip_be);
+ }
+ 
++/* PS3_NET_HOSTS and PS3_NET_DNS: the lookups a community server is reached
++ * through. The DNS half talks to a one-shot fake server on loopback. */
++#ifndef _WIN32
++#include <pthread.h>
++static host_socket_t s_dns_srv;
++static void* fake_dns(void* arg)
++{
++    (void)arg;
++    uint8_t q[512];
++    struct sockaddr_in from; socklen_t fl = sizeof from;
++    const int n = (int)recvfrom(s_dns_srv, q, sizeof q, 0, (struct sockaddr*)&from, &fl);
++    if (n < 12) return NULL;
++    uint8_t r[600];
++    memcpy(r, q, (size_t)n);
++    r[2] = 0x81; r[3] = 0x80;                 /* response, no error */
++    r[6] = 0; r[7] = 2;                       /* two answers: a CNAME, then the A */
++    int o = n;
++    const uint8_t cname[] = { 0xC0, 12, 0, 5, 0, 1, 0, 0, 0, 60, 0, 4, 3, 'x', 'y', 0 };
++    memcpy(r + o, cname, sizeof cname); o += (int)sizeof cname;
++    const uint8_t a[] = { 0xC0, 12, 0, 1, 0, 1, 0, 0, 0, 60, 0, 4, 67, 222, 156, 250 };
++    memcpy(r + o, a, sizeof a); o += (int)sizeof a;
++    sendto(s_dns_srv, r, (size_t)o, 0, (struct sockaddr*)&from, fl);
++    return NULL;
++}
++#endif
++
++static void test_name_lookup(void)
++{
++    struct in_addr a;
++    const char* list = "resistance.ps3.online.scea.com=10.0.0.1, *.scee.com=10.0.0.2;bad=nope";
++    assert(sys_net_hosts_lookup(list, "resistance.ps3.online.scea.com", &a) && a.s_addr == inet_addr("10.0.0.1"));
++    assert(sys_net_hosts_lookup(list, "RESISTANCE.ps3.online.SCEA.com", &a));          /* names ignore case */
++    assert(sys_net_hosts_lookup(list, "resistance.online.scee.com", &a) && a.s_addr == inet_addr("10.0.0.2"));
++    assert(!sys_net_hosts_lookup(list, "scee.com", &a));                               /* "*." needs a label */
++    assert(!sys_net_hosts_lookup(list, "online.scea.com", &a));
++    assert(!sys_net_hosts_lookup(list, "bad", &a));                                    /* not an address */
++    assert(!sys_net_hosts_lookup(NULL, "x", &a));
++    assert(sys_net_hosts_lookup("*=127.0.0.1", "anything.example", &a) && a.s_addr == inet_addr("127.0.0.1"));
++
++    /* gethostbyname through the list: the hostent the title reads. */
++    setenv("PS3_NET_HOSTS", list, 1);
++    strcpy((char*)vm_base + 0xF0000, "resistance.online.scee.com");
++    const uint32_t h = sys_net_bnet_gethostbyname((const char*)(uintptr_t)0xF0000);
++    assert(h && vm_read32(h + 8) == SYS_NET_AF_INET && vm_read32(h + 12) == 4);
++    const uint32_t addr0 = vm_read32(vm_read32(h + 16));
++    assert(!memcmp(vm_base + addr0, "\x0A\x00\x00\x02", 4));
++    unsetenv("PS3_NET_HOSTS");
++
++#ifndef _WIN32
++    s_dns_srv = socket(AF_INET, SOCK_DGRAM, 0);
++    struct sockaddr_in sa; memset(&sa, 0, sizeof sa);
++    sa.sin_family = AF_INET; sa.sin_addr.s_addr = htonl(0x7F000001u);
++    assert(bind(s_dns_srv, (struct sockaddr*)&sa, sizeof sa) == 0);
++    socklen_t sl = sizeof sa; getsockname(s_dns_srv, (struct sockaddr*)&sa, &sl);
++    char srv[32]; snprintf(srv, sizeof srv, "127.0.0.1:%u", ntohs(sa.sin_port));
++    pthread_t th; pthread_create(&th, NULL, fake_dns, NULL);
++    assert(sys_net_dns_query(srv, "resistance.ps3.online.scea.com", &a));
++    assert(a.s_addr == inet_addr("67.222.156.250"));          /* past the CNAME */
++    pthread_join(th, NULL);
++    host_closesocket(s_dns_srv);
++    assert(!sys_net_dns_query("not-an-ip", "x.y", &a));
++    assert(!sys_net_dns_query("127.0.0.1:0", "x.y", &a));
++#endif
++    /* PS3_NET_ALLOW: only the listed addresses, and loopback. */
++    struct in_addr x;
++    unsetenv("PS3_NET_ALLOW");
++    inet_pton(AF_INET, "8.8.8.8", &x);        assert(net_allowed(&x));
++    setenv("PS3_NET_ALLOW", "67.222.156.250, 10.1.2.3", 1);
++    inet_pton(AF_INET, "67.222.156.250", &x); assert(net_allowed(&x));
++    inet_pton(AF_INET, "10.1.2.3", &x);       assert(net_allowed(&x));
++    inet_pton(AF_INET, "127.0.0.1", &x);      assert(net_allowed(&x));
++    inet_pton(AF_INET, "8.8.8.8", &x);        assert(!net_allowed(&x));
++    inet_pton(AF_INET, "239.255.255.250", &x); assert(!net_allowed(&x));
++    unsetenv("PS3_NET_ALLOW");
++    printf("test_sys_net: name lookups passed\n");
++}
++
+ int main(void)
+ {
+     vm_base = (uint8_t*)calloc(1, 1u << 20);
+     ps3_net_host_register(bump_alloc);
++    test_name_lookup();
+     assert(s_reg[0].nid == 0x9C056962u);   /* "socket", as nid_database.py has it */
+ 
+     const uint32_t LOOP = 0x7F000001u;
 diff --git a/libs/spurs/cellSpurs.c b/libs/spurs/cellSpurs.c
 index 19a8516..3c5529c 100644
 --- a/libs/spurs/cellSpurs.c

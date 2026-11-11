@@ -128,7 +128,8 @@ comes next. Same layout as the Resistance: Fall of Man roadmap.
   patch (2026-11-11): real sockets (`PS3_NET_ONLINE=1`), lookups through a
   chosen DNS (`PS3_NET_DNS`), a locally made PSN sign-in and ticket
   (`PS3_NP_SIGNIN=1`), and with them that game signs in to PS Rewired. For
-  this port: bring those changes over, then find what Resistance 2 asks for
-  beyond them (`cellHttp`/`cellSsl`, `sceNp` matching, its own server
-  protocol), and follow the community server's rules. Not started; the
-  campaign comes first.
+  this port those changes are in the toolkit patch since 2026-11-11, all off
+  by default (offline play is unchanged; their unit tests pass here). Next:
+  see how far Resistance 2 gets with them, find what it asks for beyond them
+  (`cellHttp`/`cellSsl`, `sceNp` matching, its own server protocol), and
+  follow the community server's rules. The campaign comes first.
