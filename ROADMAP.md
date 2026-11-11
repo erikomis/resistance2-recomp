@@ -123,8 +123,12 @@ comes next. Same layout as the Resistance: Fall of Man roadmap.
   the Resistance servers in April 2014. Community projects are bringing them
   back for real consoles and RPCS3: PS Rewired is reported to run Resistance 2
   co-op and ranked play (reached by changing the console's DNS), and VGFury
-  showed a first alpha of a separate restoration in September 2026. For this
-  port it needs the network side that is only stubbed today (`sys_net`
-  sockets, `cellHttp`/`cellSsl`, `sceNp` sign-in, tickets and matching),
-  pointed at one of those community servers, with their operators'
-  agreement. Not started; the campaign comes first.
+  showed a first alpha of a separate restoration in September 2026. The
+  Resistance: Fall of Man port already has the groundwork in its toolkit
+  patch (2026-11-11): real sockets (`PS3_NET_ONLINE=1`), lookups through a
+  chosen DNS (`PS3_NET_DNS`), a locally made PSN sign-in and ticket
+  (`PS3_NP_SIGNIN=1`), and with them that game signs in to PS Rewired. For
+  this port: bring those changes over, then find what Resistance 2 asks for
+  beyond them (`cellHttp`/`cellSsl`, `sceNp` matching, its own server
+  protocol), and follow the community server's rules. Not started; the
+  campaign comes first.

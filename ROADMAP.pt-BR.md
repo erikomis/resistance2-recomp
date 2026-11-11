@@ -134,8 +134,12 @@ vem a seguir. Mesma organização do roadmap do Resistance: Fall of Man.
   estão trazendo-os de volta para consoles reais e para o RPCS3: há relatos
   de que o PS Rewired roda o cooperativo e as partidas ranqueadas do
   Resistance 2 (acessado trocando o DNS do console), e o VGFury mostrou um
-  primeiro alpha de outra restauração em setembro de 2026. Neste port falta
-  toda a parte de rede, que hoje é só simulada (sockets do `sys_net`,
-  `cellHttp`/`cellSsl`, login, tickets e matching do `sceNp`), apontada para
-  um desses servidores da comunidade, com a concordância de quem os mantém.
-  Não começado; a campanha vem primeiro.
+  primeiro alpha de outra restauração em setembro de 2026. O port do
+  Resistance: Fall of Man já tem a base no patch do toolkit dele (11/11/2026):
+  sockets de verdade (`PS3_NET_ONLINE=1`), consultas por um DNS escolhido
+  (`PS3_NET_DNS`), login e ticket da PSN feitos localmente
+  (`PS3_NP_SIGNIN=1`), e com isso aquele jogo entra no PS Rewired. Neste
+  port: trazer essas mudanças, depois descobrir o que o Resistance 2 pede
+  além delas (`cellHttp`/`cellSsl`, matching do `sceNp`, o protocolo do
+  servidor dele) e seguir as regras do servidor da comunidade. Não começado;
+  a campanha vem primeiro.
