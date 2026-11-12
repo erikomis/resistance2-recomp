@@ -22,7 +22,6 @@ import tempfile
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import r2_layout  # noqa: E402
 
-VA = 0x00ED2330
 SIZE = 320
 LS_BASE = 0x10
 ENTRY = 0x20
@@ -42,7 +41,7 @@ def main():
     wrap = tk / "tools/wrap_spu_elf.py"
     if not wrap.is_file():
         raise SystemExit(f"no toolkit at {tk} (run tools/setup_toolkit.sh, or set PS3RECOMP_DIR)")
-    raw = r2_layout.eboot_bytes(args.eboot, VA, SIZE, "the raw-SPU loader")
+    raw = r2_layout.eboot_bytes(args.eboot, r2_layout.eboot_build(args.eboot)["loader"], SIZE, "the raw-SPU loader")
     if r2_layout.fnv1a64(raw) != FINGERPRINT:
         raise SystemExit("the raw-SPU loader's fingerprint differs: not the tested BCUS98120 EBOOT?")
     out = args.out or args.eboot.parent / "spu_images"

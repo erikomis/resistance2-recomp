@@ -29,9 +29,11 @@ from wrap_spu_elf import wrap
 
 # Second PT_LOAD: file offset + this = guest address.
 VA_OFFSET = 0x10000
-DATA_LO, DATA_HI = 0xCF0000, 0xEF12FC
-# The raw SPU programs tools/prepare_r2_rawspu.py lifts, as file offsets.
-RAW = [(0xE9B400 - VA_OFFSET, 0x07120), (0xEA2580 - VA_OFFSET, 0x13D70), (0xEB6580 - VA_OFFSET, 0x18010)]
+# Set in main() from r2_layout.EBOOT_BUILDS for the executable being read: the
+# data segment's file range, and the raw SPU programs tools/prepare_r2_rawspu.py
+# lifts, as file offsets.
+DATA_LO, DATA_HI = 0, 0
+RAW = []
 FIRST_IMAGE_ID = 300
 HEADER = 0x30
 
@@ -71,6 +73,10 @@ def main():
     ap.add_argument('--extra', default='', help='comma-separated "0xEA:0xOFF" extra entries inside a blob')
     a = ap.parse_args()
     d = open(a.eboot, 'rb').read()
+    global DATA_LO, DATA_HI, RAW
+    build = r2_layout.eboot_build(a.eboot)
+    DATA_LO, DATA_HI = build["data"]
+    RAW = [(va - VA_OFFSET, size) for va, size, _ in build["rawspu"].values()]
     blobs = find_blobs(d)
     if not blobs:
         sys.exit('no relocatable blobs found')

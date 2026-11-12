@@ -19,7 +19,7 @@ TK=${PS3RECOMP_DIR:-$here/ps3recomp}
 PY=${PY:-python3}
 elf=${1:-$here/game/BCUS98120/EBOOT.elf}
 work=${RES_OUT:-$here/out}/r2-jobmods-elf
-dest=$here/port/spu/jobmods
+dest=${R2_SPU_DIR:-$here/port/spu}/jobmods
 
 [ -f "$TK/tools/lift_jobmods.py" ] || { echo "no toolkit at $TK (run tools/setup_toolkit.sh)" >&2; exit 1; }
 [ -f "$elf" ] || { echo "no $elf: decrypt your EBOOT.BIN first (tools/rebuild.sh decrypt)" >&2; exit 1; }

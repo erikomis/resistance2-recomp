@@ -24,12 +24,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import r2_layout  # noqa: E402
 
 LS_BASE = 0x200
-# name: (EBOOT VA, bytes the loader streams in, FNV-1a of those bytes, SPU image id)
-PROGRAMS = {
-    "bink":     (0x00EB6580, 0x18010, 0xA775870FC5D6B6F5, 910004),
-    "rawspu_a": (0x00E9B400, 0x07120, 0x020CB0B057A2388F, 910005),
-    "rawspu_b": (0x00EA2580, 0x13D70, 0x642B471A9CFBBDF1, 910006),
-}
+# name: SPU image id. Where each program sits in the EBOOT, its size and its
+# FNV-1a are per build of the executable: r2_layout.EBOOT_BUILDS.
+PROGRAMS = {"bink": 910004, "rawspu_a": 910005, "rawspu_b": 910006}
 
 
 def register_c(name, va, size, image_id):
@@ -66,7 +63,8 @@ def main():
     parser.add_argument("--toolkit", type=Path, default=None, help="default: PS3RECOMP_DIR or ./ps3recomp")
     args = parser.parse_args()
     for name in args.only or PROGRAMS:
-        va, size, want, image_id = PROGRAMS[name]
+        image_id = PROGRAMS[name]
+        va, size, want = r2_layout.eboot_build(args.eboot)["rawspu"][name]
         dest = args.spu_dir / f"r2_{name}"
         raw = r2_layout.eboot_bytes(args.eboot, va, size, f"the raw-SPU program {name}")
         if r2_layout.fnv1a64(raw) != want:

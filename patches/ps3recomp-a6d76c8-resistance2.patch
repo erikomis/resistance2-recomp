@@ -3571,7 +3571,7 @@ index 4d916ac..4ef0ff8 100644
      int best = -1;
      size_t best_len = 0;
 diff --git a/libs/input/cellPad.c b/libs/input/cellPad.c
-index 7fa8cab..80cac5a 100644
+index 7fa8cab..d4990e6 100644
 --- a/libs/input/cellPad.c
 +++ b/libs/input/cellPad.c
 @@ -4,10 +4,29 @@
@@ -4656,7 +4656,18 @@ index 7fa8cab..80cac5a 100644
  
      s_pad_initialized = 0;
      s_max_connect = 0;
-@@ -716,9 +1489,29 @@ skip_inject: ;
+@@ -711,14 +1484,39 @@ skip_inject: ;
+            * looks like regardless of poll rate. */
+           static int fired[256], held[256];
+           for (int i = 0; i < n_ev; i++) {
+-              if (!fired[i] && now >= ev[i].t) { fired[i] = 1; held[i] = 40; }
++              /* PAD_SCRIPT_HOLD=<polls>: how long each press is held (40 by
++               * default). A menu with auto-repeat moves several rows in 40
++               * polls; a short hold moves one. */
++              static int hold = -1;
++              if (hold < 0) { const char* h = getenv("PAD_SCRIPT_HOLD"); hold = h && atoi(h) > 0 ? atoi(h) : 40; }
++              if (!fired[i] && now >= ev[i].t) { fired[i] = 1; held[i] = hold; }
+               if (held[i] > 0) {
                    held[i]--;
                    data->button[CELL_PAD_BTN_OFFSET_DIGITAL1] |= (u16)(ev[i].mask & 0xFF);
                    data->button[CELL_PAD_BTN_OFFSET_DIGITAL2] |= (u16)((ev[i].mask >> 8) & 0xFF);
@@ -4688,7 +4699,7 @@ index 7fa8cab..80cac5a 100644
                }
            }
        } }
-@@ -735,6 +1528,7 @@ skip_inject: ;
+@@ -735,6 +1533,7 @@ skip_inject: ;
       *   echo 0x0040 4 > pad.txt  # DOWN for 4 polls (menus auto-repeat a
       *                            # long hold; the default is 40)
       */
@@ -4696,7 +4707,7 @@ index 7fa8cab..80cac5a 100644
      { static int s_pf = -1; static char pf_path[512];
        static unsigned held_mask = 0; static int held_n = 0;
        if (s_pf < 0) { const char* e = getenv("PAD_FILE");
-@@ -746,11 +1540,25 @@ skip_inject: ;
+@@ -746,11 +1545,25 @@ skip_inject: ;
                if (f) {
                    char buf[64]; buf[0] = 0;
                    if (fgets(buf, sizeof buf, f)) {
@@ -4727,7 +4738,7 @@ index 7fa8cab..80cac5a 100644
                    }
                    fclose(f);
                    if (held_n > 0) { FILE* w = fopen(pf_path, "wb"); if (w) fclose(w); }
-@@ -782,6 +1590,12 @@ skip_inject: ;
+@@ -782,6 +1595,12 @@ skip_inject: ;
        if (s_st && pad_clock(s_t0) >= s_from && pad_clock(s_t0) < s_until) { hs->analog_lx = s_v[0]; hs->analog_ly = s_v[1];
                    hs->analog_rx = s_v[2]; hs->analog_ry = s_v[3];
                    hs->connected = 1; }
@@ -4740,7 +4751,7 @@ index 7fa8cab..80cac5a 100644
        /* PAD_SWEEP=<seconds per step>: walk the sticks through a fixed set of
         * deflections instead of holding one. Guessing a single stick position and
         * re-running costs ~5 minutes a try; a sweep answers "can input move the
-@@ -896,6 +1710,21 @@ emit:
+@@ -896,6 +1715,21 @@ emit:
      }
      {
          unsigned int ea = (unsigned int)(uintptr_t)data_guest;
@@ -4762,7 +4773,7 @@ index 7fa8cab..80cac5a 100644
          vm_write32((unsigned long long)ea + 0, (unsigned int)data->len);   /* len (s32) */
          for (int _i = 0; _i < CELL_PAD_MAX_CODES; _i++)                    /* button[] u16 */
              vm_write16((unsigned long long)ea + 4 + (unsigned int)_i * 2, data->button[_i]);
-@@ -946,7 +1775,7 @@ s32 cellPadGetInfo(CellPadInfo2* info)
+@@ -946,7 +1780,7 @@ s32 cellPadGetInfo(CellPadInfo2* info)
                    (s_host_state[i].connected || i == 0));
          vm_write16(gaddr + 0x00C + i * 2, on ? 0x054C : 0);   /* vendor: Sony  */
          vm_write16(gaddr + 0x10A + i * 2, on ? 0x0268 : 0);   /* product: DS3  */
@@ -4771,7 +4782,7 @@ index 7fa8cab..80cac5a 100644
      }
      return CELL_OK;
  }
-@@ -973,7 +1802,7 @@ s32 cellPadGetInfo2(CellPadInfo2* info_guest)
+@@ -973,7 +1807,7 @@ s32 cellPadGetInfo2(CellPadInfo2* info_guest)
           * boot flows that block until a controller is connected can proceed even
           * with no physical device attached. */
          if (s_host_state[i].connected || i == 0) {
@@ -4780,7 +4791,7 @@ index 7fa8cab..80cac5a 100644
              info->port_setting[i]      = s_port_setting[i];
              info->device_capability[i] = CELL_PAD_CAPABILITY_PS3_CONFORMITY
                                         | CELL_PAD_CAPABILITY_PRESS_MODE
-@@ -983,7 +1812,7 @@ s32 cellPadGetInfo2(CellPadInfo2* info_guest)
+@@ -983,7 +1817,7 @@ s32 cellPadGetInfo2(CellPadInfo2* info_guest)
              info->device_type[i]       = CELL_PAD_DEV_TYPE_STANDARD;
              connected++;
          } else {
@@ -4789,7 +4800,7 @@ index 7fa8cab..80cac5a 100644
          }
      }
      info->now_connect = connected;
-@@ -1028,7 +1857,7 @@ s32 cellPadPeriphGetInfo(CellPadPeriphInfo* info_guest)
+@@ -1028,7 +1862,7 @@ s32 cellPadPeriphGetInfo(CellPadPeriphInfo* info_guest)
          /* Same virtual-pad-on-port-0 rule as cellPadGetInfo2, so both views of
           * the ports agree (a game that cross-checks them must see one truth). */
          if ((i < PAD_MAX_HOST_PORTS && s_host_state[i].connected) || i == 0) {
@@ -4798,7 +4809,7 @@ index 7fa8cab..80cac5a 100644
              info->port_setting[i]      = s_port_setting[i];
              info->device_capability[i] = CELL_PAD_CAPABILITY_PS3_CONFORMITY
                                         | CELL_PAD_CAPABILITY_PRESS_MODE
-@@ -1040,7 +1869,7 @@ s32 cellPadPeriphGetInfo(CellPadPeriphInfo* info_guest)
+@@ -1040,7 +1874,7 @@ s32 cellPadPeriphGetInfo(CellPadPeriphInfo* info_guest)
              info->pclass_profile[i]    = 0;
              connected++;
          } else {
@@ -4807,7 +4818,7 @@ index 7fa8cab..80cac5a 100644
          }
      }
      info->now_connect = connected;
-@@ -1104,6 +1933,39 @@ s32 cellPadSetPressMode(u32 port_no, u32 mode)
+@@ -1104,6 +1938,39 @@ s32 cellPadSetPressMode(u32 port_no, u32 mode)
      return CELL_OK;
  }
  
@@ -4847,7 +4858,7 @@ index 7fa8cab..80cac5a 100644
  s32 cellPadGetCapabilityInfo(u32 port_no, CellPadCapabilityInfo* info)
  {
      if (!s_pad_initialized)
-@@ -1136,29 +1998,43 @@ s32 cellPadSetActDirect(u32 port_no, CellPadActParam* param)
+@@ -1136,29 +2003,43 @@ s32 cellPadSetActDirect(u32 port_no, CellPadActParam* param)
  
      param = GUEST_PTR(param, CellPadActParam*);
  

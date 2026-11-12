@@ -60,7 +60,7 @@ base=$(git rev-parse HEAD)   # a6d76c8's tree, under a local commit id
 
 # 2. The working folder's toolkit files over it.
 ( cd "$src" && find . \( -name .git -o -name .DS_Store -o -name __pycache__ -o -name generated_spu \
-        -o -path ./game -o -path ./PS3_GAME -o -path ./PS3_UPDATE -o -path ./analysis \
+        -o -path ./game -o -path './game_*' -o -path ./updates -o -path ./PS3_GAME -o -path ./PS3_UPDATE -o -path ./analysis \
         -o -path ./recompiled -o -path ./build -o -path ./out -o -path ./modules \
         -o -path ./project -o -path ./port -o -path ./patches -o -path ./ps3recomp \) -prune \
         -o -type f -print ) | sed 's|^\./||' | grep -v -E \

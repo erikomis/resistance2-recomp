@@ -19,14 +19,13 @@ import sys
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import r2_layout  # noqa: E402
 
-VA = 0x00CF9680
 SIZE = 12544
 LS_BASE = 0xA00
 FINGERPRINT = 0x924CAF0A30D9F98F
 
 
 def image(eboot):
-    data = r2_layout.eboot_bytes(eboot, VA, SIZE, "the WWS policy module")
+    data = r2_layout.eboot_bytes(eboot, r2_layout.eboot_build(eboot)["pm"], SIZE, "the WWS policy module")
     if r2_layout.fnv1a64(data) != FINGERPRINT:
         raise SystemExit("the WWS policy module's fingerprint differs: not the tested BCUS98120 EBOOT?")
     return data

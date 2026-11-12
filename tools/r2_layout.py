@@ -51,6 +51,49 @@ def disc_root():
     return ROOT
 
 
+# The builds of the executable the tools know, by the SHA-256 of the decrypted
+# EBOOT.elf: where the SPU code sits in each. 01.00 is the disc; 01.60 is the
+# last game update (the one the community servers expect).
+#   pm       VA of the Wws_Job policy module (the same 12,544 bytes in both)
+#   rawspu   name: (VA, bytes, FNV-1a of those bytes)
+#   loader   VA of the 320-byte raw-SPU loader (the same bytes in both)
+#   data     file offsets of the second PT_LOAD (where the relocatable SPU
+#            blobs are looked for)
+EBOOT_BUILDS = {
+    "408eb55fa3f00fc43823517df28044451d9192e2023219c98ebb6f95e41e89f5": {
+        "version": "01.00",
+        "pm": 0x00CF9680,
+        "rawspu": {"bink":     (0x00EB6580, 0x18010, 0xA775870FC5D6B6F5),
+                   "rawspu_a": (0x00E9B400, 0x07120, 0x020CB0B057A2388F),
+                   "rawspu_b": (0x00EA2580, 0x13D70, 0x642B471A9CFBBDF1)},
+        "loader": 0x00ED2330,
+        "data": (0xCF0000, 0xEF12FC),
+    },
+    "697bd1df98f79ce099e54e0e60e0a1744d3950ea43a2a06978f69a91e51b3d41": {
+        "version": "01.60",
+        "pm": 0x00D0A180,
+        "rawspu": {"bink":     (0x00EC5600, 0x18010, 0xFB1BC0994343AD86),
+                   "rawspu_a": (0x00EAA480, 0x07120, 0xE1EB41653B7071E7),
+                   "rawspu_b": (0x00EB1600, 0x13D70, 0x4D6CD8F46BF8D72D)},
+        "loader": 0x00EE13B0,
+        "data": (0xD00000, 0xF004EC),
+    },
+}
+_build_cache = {}
+
+
+def eboot_build(path):
+    """The EBOOT_BUILDS entry for the EBOOT.elf at path."""
+    import hashlib
+    path = Path(path).resolve()
+    if path not in _build_cache:
+        digest = hashlib.sha256(path.read_bytes()).hexdigest()
+        if digest not in EBOOT_BUILDS:
+            raise SystemExit(f"{path}: not a known BCUS98120 executable (01.00 or 01.60), sha256 {digest}")
+        _build_cache[path] = EBOOT_BUILDS[digest]
+    return _build_cache[path]
+
+
 def fnv1a64(data):
     value = 1469598103934665603
     for byte in data:
