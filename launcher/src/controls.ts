@@ -7,6 +7,7 @@
 // no file and the game uses its built-in layout (the one in DEFAULTS).
 import { invoke } from "@tauri-apps/api/core";
 import { Key, t } from "./i18n";
+import { applyLayout, MODERN } from "./layout";
 import { flashSaved } from "./ui";
 
 export type Device = "keyboard" | "mouseButtons" | "controller";
@@ -20,20 +21,20 @@ interface InputMapView {
 const DEVICES: Device[] = ["keyboard", "mouseButtons", "controller"];
 
 /** PS3 controls, in the screen's order, with the label shown for each and
- * what it does in Resistance 2 (the game's default layout, as its own
- * on-screen hints name the buttons: R1 fire, R2 secondary fire, L1 zoom,
- * L2 grenade, ✕ jump, ○ crouch, □ reload/use/pick up, △ switch weapons,
- * L3 sprint, R3 melee, SELECT the map). */
+ * what it does in Resistance 2 (the game's default layout, as its Options >
+ * Controls screen shows it, "Default controls": R1 fire, R2 secondary fire,
+ * L1 zoom, L2 sprint/crouch, ✕ jump, ○ grenade, □ reload, △ switch weapons,
+ * R3 melee, L3 nothing; SELECT the map). */
 const CONTROLS: { id: string; label: string | Key; act?: Key }[] = [
   { id: "r1", label: "R1", act: "act.fire" },
   { id: "l1", label: "L1", act: "act.aim" },
-  { id: "l2", label: "L2", act: "act.grenade" },
+  { id: "l2", label: "L2", act: "act.sprint" },
   { id: "r2", label: "R2", act: "act.altFire" },
   { id: "cross", label: "✕", act: "act.jump" },
-  { id: "circle", label: "○", act: "act.crouch" },
+  { id: "circle", label: "○", act: "act.grenade" },
   { id: "square", label: "□", act: "act.reload" },
   { id: "triangle", label: "△", act: "act.weapon" },
-  { id: "l3", label: "L3", act: "act.sprint" },
+  { id: "l3", label: "L3" },
   { id: "r3", label: "R3", act: "act.melee" },
   { id: "start", label: "START", act: "act.pause" },
   { id: "select", label: "SELECT", act: "act.map" },
@@ -461,7 +462,18 @@ export function initControls() {
     endCapture();
     renderControls();
     await save();
-    note(t((c.r1 ?? []).includes("righttrigger") ? "controls.triggersOn" : "controls.triggersOff"));
+    const r1 = c.r1 ?? [];
+    note(t(r1.includes("righttrigger") ? "controls.triggersOn"
+      : r1.includes("rightshoulder") ? "controls.triggersOff" : "controls.triggersSwapped"));
+  });
+  // the full modern layout (layout.ts) over the controller's bindings;
+  // Restore defaults is the way back
+  $("controls-modern").addEventListener("click", async () => {
+    bindings.controller = applyLayout(bindings.controller, MODERN);
+    endCapture();
+    renderControls();
+    await save();
+    note(t("controls.modernOn"));
   });
   // without a file yet this shows the folder it will be written to
   $("controls-open").addEventListener("click", () => mapPath && invoke("reveal", { path: mapPath }));

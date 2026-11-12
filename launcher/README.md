@@ -136,10 +136,14 @@ next time the game starts.
   manager** (below).
 - **Controls / Controles**: the bindings table, PS3 control by keyboard,
   mouse button and controller, with what each does in Resistance 2, as the
-  game's own on-screen hints name the buttons (R1 fire, R2 secondary fire,
-  L1 zoom, L2 grenade, ✕ jump, ○ crouch, □ reload/use/pick up, △ switch
-  weapons, L3 sprint, R3 melee, START pause, SELECT the map, left stick move,
-  right stick look). Click a cell and press the input; it is written at once
+  game's Options > Controls screen shows its default layout (R1 fire, R2
+  secondary fire, L1 zoom, L2 sprint/crouch, ✕ jump, ○ grenade, □
+  reload/use/pick up, △ switch weapons, R3 melee, L3 nothing, START pause,
+  SELECT the map, left stick move, right stick look). **Fire with R2 (PS5
+  style)** swaps the controller's L1/R1 and L2/R2 bindings (again swaps
+  back); **Modern layout** sets the controller to R2 fire, L2 zoom, L1
+  secondary fire, R1 grenade (○ too, so it still backs out of menus), L3
+  sprint/crouch (`src/layout.ts`). Click a cell and press the input; it is written at once
   to `<data>/input.toml` (the toolkit's `libs/input/pad_input_map.h` format,
   the same file and the same built-in layout as the Resistance: Fall of Man
   port: `[keyboard]`, `[mouse_buttons]`, `[controller]`, any other section
