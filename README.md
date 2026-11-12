@@ -350,8 +350,14 @@ tools/build_online.sh       # download extract stage decrypt analyse lift spu bu
 
 It downloads the two official update packages (01.50 and 01.60, about
 340 MB) from Sony's update server, checks their size and SHA-1, extracts
-them, decrypts the 01.60 `EBOOT.BIN` with RPCS3 and builds it into
-`build/BCUS98120_v160/` (any step runs alone by name, as with `rebuild.sh`).
+them, decrypts the 01.60 `EBOOT.BIN` and builds it into
+`build/BCUS98120_v160/` (any step runs alone by name, as with `rebuild.sh`;
+with none named it continues where it stopped and skips what is done). The
+01.60 `EBOOT.BIN` is an NPDRM file with a free licence, so
+`tools/decrypt_self.py` decrypts it without RPCS3, with keys
+`tools/fetch_keys.py --npdrm` takes from RPCS3's public source code (checked
+by SHA-256, kept outside the repository); RPCS3 is only the fallback when
+that fails.
 What it writes goes to `game/BCUS98120_v160/`, `analysis/`, `recompiled/`,
 `build/` and `port/spu_v160/`, all `.gitignore`'d.
 
@@ -368,6 +374,18 @@ game's menu, the first screen from the server is its user agreement:
 accepting or declining it is up to you. As of 2026-11-12 the 01.60 build
 boots, signs in and reaches that screen; the lobby, the game list and a
 match are untested.
+
+**From RecompLauncher**: its setup builds the online version too, right
+after the campaign (about 30 minutes and 4 GB more, with the 340 MB
+download from Sony). If that part fails the campaign is still ready, and
+the setup's last line says why. The game then has two tiles, "Resistance 2"
+and "Resistance 2 — Online (PS Rewired)". RecompLauncher has no place to
+type text, so set your online ID once in the Resistance 2 Launcher window
+(Home > Online; the **Resistance 2 Launcher** button on the game's page in
+RecompLauncher opens it). The Online tile then starts online play directly,
+always at 30 fps; if something is missing (the ID, the online version, the
+campaign's first start) it says what. Details and exit codes:
+[launcher/README.md](launcher/README.md#recomplauncher).
 
 ### Environment
 

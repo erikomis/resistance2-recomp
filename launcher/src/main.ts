@@ -1969,12 +1969,16 @@ async function main() {
   refreshShaderCache();
   void refreshUpdates(settings.autoUpdateCheck ?? true);
   if (status && !status.builds) void findPortDirs();
-  // opened by the Play shortcut (--play): start the game as the Play button would
-  const playNow = await invoke<boolean>("take_play_request").catch(() => false);
+  // opened by the Play shortcut (--play) or with --play-online: start the game
+  // as the Play or Play online button would
+  const playNow = await invoke<"play" | "online" | null>("take_play_request").catch(() => null);
   // --view <page>[:<tab>] on the command line (docs screenshots)
   const view = await invoke<string | null>("take_start_view").catch(() => null);
   const [page, tab] = (view ?? "").split(":");
-  if (playNow && status?.builds?.ok && status.hostSupported && !gameRunning && !rebuildRunning) await startGame(false);
+  if (playNow === "online" && status?.hostSupported && !gameRunning && !rebuildRunning) {
+    showView("home");
+    await startOnline();
+  } else if (playNow === "play" && status?.builds?.ok && status.hostSupported && !gameRunning && !rebuildRunning) await startGame(false);
   else if (status && !status.builds?.ok && !installCard()) showView("advanced", "install");
   else if (page && ["home", "graphics", "performance", "game", "controls", "advanced"].includes(page)) showView(page, tab || undefined);
 }

@@ -367,9 +367,14 @@ tools/build_online.sh       # download extract stage decrypt analyse lift spu bu
 
 Ele baixa os dois pacotes oficiais da atualização (01.50 e 01.60, uns
 340 MB) do servidor de atualizações da Sony, confere o tamanho e o SHA-1,
-extrai, decifra o `EBOOT.BIN` da 01.60 com o RPCS3 e compila em
+extrai, decifra o `EBOOT.BIN` da 01.60 e compila em
 `build/BCUS98120_v160/` (qualquer passo roda sozinho pelo nome, como no
-`rebuild.sh`). O que ele escreve vai para `game/BCUS98120_v160/`,
+`rebuild.sh`; sem nenhum nome ele continua de onde parou e pula o que já
+está feito). O `EBOOT.BIN` da 01.60 é um arquivo NPDRM de licença gratuita,
+então o `tools/decrypt_self.py` o decifra sem o RPCS3, com chaves que o
+`tools/fetch_keys.py --npdrm` tira do código-fonte público do RPCS3
+(conferido por SHA-256, guardado fora do repositório); o RPCS3 só entra
+quando isso falha. O que ele escreve vai para `game/BCUS98120_v160/`,
 `analysis/`, `recompiled/`, `build/` e `port/spu_v160/`, tudo no
 `.gitignore`.
 
@@ -386,6 +391,18 @@ variáveis extras. Quando você entra no online pelo menu do jogo, a primeira
 tela do servidor é o contrato de uso: aceitar ou recusar é com você. Em
 12/11/2026 o build 01.60 abre, faz login e chega a essa tela; o lobby, a
 lista de partidas e uma partida ainda não foram testados.
+
+**Pelo RecompLauncher**: a instalação dele compila também a versão online,
+logo depois da campanha (uns 30 minutos e 4 GB a mais, com o download de
+340 MB da Sony). Se essa parte falhar, a campanha continua pronta, e a
+última linha da instalação diz o porquê. O jogo fica com dois blocos,
+"Resistance 2" e "Resistance 2 — Online (PS Rewired)". O RecompLauncher não
+tem onde digitar texto, então defina o seu online ID uma vez na janela do
+Resistance 2 Launcher (Início > Online; o botão **Resistance 2 Launcher** na
+página do jogo no RecompLauncher a abre). Aí o bloco Online abre o online
+direto, sempre a 30 fps; se faltar algo (o ID, a versão online, a primeira
+vez da campanha) ele diz o quê. Detalhes e códigos de saída:
+[launcher/README.md](launcher/README.md#recomplauncher).
 
 ### Ambiente
 

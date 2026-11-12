@@ -362,6 +362,12 @@ fn install_log_path() -> PathBuf {
     data_root().join("install.log")
 }
 
+/// The online build's output (tools/build_online.sh, run by the headless
+/// prepare after the campaign's build), beside install.log.
+fn online_log_path() -> PathBuf {
+    data_root().join("install-online.log")
+}
+
 /// The port's repository ("Install the game" clones it; RES_SOURCES_URL
 /// overrides it, e.g. with a fork or a mirror).
 const SOURCES_URL: &str = "https://github.com/erikomis/resistance2-recomp.git";
@@ -1009,7 +1015,9 @@ pub struct AppState {
     last_log: Mutex<Option<PathBuf>>,
     /// The launcher's Dock icon as last set (app_icon::key; "" = the bundle's).
     dock_icon: Mutex<String>,
-    play_request: Mutex<bool>,
+    /// `--play` ("play") or `--play-online` ("online") with the window: what
+    /// it starts once it is up (take_play_request).
+    play_request: Mutex<Option<&'static str>>,
     exit_with_game: Mutex<bool>,
     /// `--view <page>`: the page to open on (play_shortcut::start_view).
     start_view: Mutex<Option<String>>,
@@ -2003,33 +2011,90 @@ fn start_online(app: AppHandle, state: State<'_, AppState>) -> Result<OnlineStar
     if slot.is_some() {
         return Err("game-running".into());
     }
-    let s = load_settings_file();
-    if !valid_online_id(s.online_id.trim()) {
-        return Err("online-id".into());
-    }
-    let root = port_root(&s).ok_or("online-build")?;
-    let o = resolve_online(&root);
-    if !o.build_ok {
-        return Err("online-build".into());
-    }
-    let (Some(update), Some(elf)) = (o.update.clone(), o.eboot_elf.clone()) else {
-        return Err("online-update".into());
-    };
-    if cfg!(unix) && file_sha256(Path::new(&elf)).as_deref() != Some(ONLINE_ELF_SHA) {
-        return Err("online-build".into());
-    }
-    // the online folder before the disc, so a refusal leaves no image attached
-    let online = online_dir(&s);
-    prepare_online_dir(&play_dir(&s), &online, Path::new(&update))?;
-    let (disc, mounted) = player_disc(&s)?;
-    let builds = Builds { root: self::s(&root), host: o.host.clone(), eboot: o.eboot.clone(), eboot_elf: Some(elf), ok: true, ..Default::default() };
-    let argv = launch_argv(&s, &builds)?;
-    let env = online_env(&s, &disc, &online, &input_env());
-    // nothing forbidden online comes from the launcher's own environment either
-    let unset: Vec<String> = std::env::vars_os().filter_map(|(k, _)| k.into_string().ok()).filter(|k| online_forbidden(k)).collect();
-    let run = GameRun { argv, env, unset, dir: online, report_dir: None, builds, disc };
+    let (run, mounted) = online_run(&load_settings_file()).map_err(OnlineRefusal::window_text)?;
     let started = spawn_game(&app, &state, slot, run)?;
     Ok(OnlineStarted { log: s_(&started.log), mounted, previous_log: started.previous_log.map(|p| s_(&p)) })
+}
+
+/// Why online play cannot start. The window explains each by its text
+/// (window_text: "online-id", "online-build", ...); `--play-online` under
+/// RecompLauncher maps them onto its exit codes (prepare.rs).
+#[derive(Debug, PartialEq)]
+pub(crate) enum OnlineRefusal {
+    /// No online ID set, or not a valid one.
+    Id,
+    /// The 01.60 build, its EBOOT.elf or a window host missing, or the
+    /// EBOOT.elf is not the 01.60 one.
+    Build,
+    /// The update's files are missing.
+    Update,
+    /// The campaign has not done its HDD install yet.
+    Install,
+    /// No disc ("no-disc"), not BCUS98120, or the image would not attach.
+    Disc(String),
+    Other(String),
+}
+
+impl OnlineRefusal {
+    fn window_text(self) -> String {
+        match self {
+            OnlineRefusal::Id => "online-id".into(),
+            OnlineRefusal::Build => "online-build".into(),
+            OnlineRefusal::Update => "online-update".into(),
+            OnlineRefusal::Install => "online-install".into(),
+            OnlineRefusal::Disc(e) | OnlineRefusal::Other(e) => e,
+        }
+    }
+
+    /// In words, for a log line.
+    pub(crate) fn describe(&self) -> String {
+        match self {
+            OnlineRefusal::Id => "no online ID set, or not a valid one".into(),
+            OnlineRefusal::Build => "the 01.60 build is missing, or its EBOOT.elf is not the 01.60 one".into(),
+            OnlineRefusal::Update => "the 01.60 update's files are missing".into(),
+            OnlineRefusal::Install => "the campaign has not done its first boot's HDD install yet".into(),
+            OnlineRefusal::Disc(e) | OnlineRefusal::Other(e) => e.clone(),
+        }
+    }
+}
+
+/// The names of the launcher's own environment that online play takes out
+/// of the game's (online_forbidden): nothing forbidden online comes from
+/// there either, whoever started the launcher.
+fn online_unset<I: IntoIterator<Item = String>>(names: I) -> Vec<String> {
+    names.into_iter().filter(|k| online_forbidden(k)).collect()
+}
+
+/// Everything "Play online" decides before the game starts, for the window's
+/// button and `--play-online` under RecompLauncher alike: the online ID, the
+/// 01.60 build and its EBOOT.elf (checked by its SHA-256), the update's files,
+/// the online folder (made before the disc, so a refusal leaves no image
+/// attached), the disc, the command line, and online_env with the launcher's
+/// own forbidden variables unset. Returns the run and the mount point when
+/// the disc image was attached for it.
+fn online_run(s: &Settings) -> Result<(GameRun, Option<String>), OnlineRefusal> {
+    if !valid_online_id(s.online_id.trim()) {
+        return Err(OnlineRefusal::Id);
+    }
+    let root = port_root(s).ok_or(OnlineRefusal::Build)?;
+    let o = resolve_online(&root);
+    if !o.build_ok {
+        return Err(OnlineRefusal::Build);
+    }
+    let (Some(update), Some(elf)) = (o.update.clone(), o.eboot_elf.clone()) else {
+        return Err(OnlineRefusal::Update);
+    };
+    if cfg!(unix) && file_sha256(Path::new(&elf)).as_deref() != Some(ONLINE_ELF_SHA) {
+        return Err(OnlineRefusal::Build);
+    }
+    let online = online_dir(s);
+    prepare_online_dir(&play_dir(s), &online, Path::new(&update)).map_err(|e| if e == "online-install" { OnlineRefusal::Install } else { OnlineRefusal::Other(e) })?;
+    let (disc, mounted) = player_disc(s).map_err(OnlineRefusal::Disc)?;
+    let builds = Builds { root: self::s(&root), host: o.host.clone(), eboot: o.eboot.clone(), eboot_elf: Some(elf), ok: true, ..Default::default() };
+    let argv = launch_argv(s, &builds).map_err(OnlineRefusal::Other)?;
+    let env = online_env(s, &disc, &online, &input_env());
+    let unset = online_unset(std::env::vars_os().filter_map(|(k, _)| k.into_string().ok()));
+    Ok((GameRun { argv, env, unset, dir: online, report_dir: None, builds, disc }, mounted))
 }
 
 /// Stop: SIGTERM to what Play started (the window host closes the game, then
@@ -2442,10 +2507,12 @@ async fn finder_icon(app: AppHandle, set: bool) -> Result<bool, String> {
 }
 
 #[tauri::command]
-fn take_play_request(state: State<'_, AppState>) -> bool {
-    let asked = std::mem::take(&mut *state.play_request.lock().unwrap());
-    if asked {
-        eprintln!("[launcher] --play: starting the game once the window is ready");
+fn take_play_request(state: State<'_, AppState>) -> Option<&'static str> {
+    let asked = state.play_request.lock().unwrap().take();
+    match asked {
+        Some("online") => eprintln!("[launcher] --play-online: starting online once the window is ready"),
+        Some(_) => eprintln!("[launcher] --play: starting the game once the window is ready"),
+        None => {}
     }
     asked
 }
@@ -3145,6 +3212,11 @@ pub(crate) struct InstallJob {
     cmd: Command,
     /// The port folder it works in (`<data>/src` when it clones the sources).
     at: PathBuf,
+    /// Where its output is written (install.log, install-online.log).
+    log: PathBuf,
+    /// The script named on its first line (None: tools/install.sh, or
+    /// tools/rebuild.sh in a port without it).
+    script: Option<&'static str>,
 }
 
 /// Everything "Install the game" decides before it starts, shared by the
@@ -3210,18 +3282,53 @@ fn install_job() -> Result<InstallJob, InstallRefusal> {
     }
     deps_build_env(&mut cmd);
     own_process_group(&mut cmd);
-    Ok(InstallJob { cmd, at: root.unwrap_or_else(src_dir) })
+    Ok(InstallJob { cmd, at: root.unwrap_or_else(src_dir), log: install_log_path(), script: None })
 }
 
-/// Start an install job: its output into `<data>/install.log` and `sink`,
-/// the command line first. Returns the child's pid and the thread that ends
-/// once `sink` has its exit code.
+/// The online build (tools/build_online.sh of the port folder `at`, the one
+/// the campaign was just built in), for the headless prepare: the same
+/// environment as the install (the tool PATH, the build tools' folder, JOBS),
+/// its output into install-online.log. The script continues where an earlier
+/// run stopped. None when this checkout has no tools/build_online.sh.
+fn online_install_job(at: &Path) -> Option<InstallJob> {
+    let script = at.join("tools/build_online.sh");
+    if !script.is_file() {
+        return None;
+    }
+    let st = load_settings_file();
+    let mut cmd = Command::new("/usr/bin/nice");
+    cmd.args(["-n", "10", "/bin/zsh"])
+        .arg(&script)
+        .current_dir(at)
+        .env("PATH", tool_path())
+        .env("RES_DEPS", deps_dir())
+        .env("TERM", "dumb")
+        .env("GIT_TERMINAL_PROMPT", "0")
+        // the script finds its checkout and its folders from where it is
+        .env_remove("RES_ROOT")
+        .env_remove("PS3RECOMP_DIR")
+        .env_remove("RES_V160")
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+    if st.jobs > 0 {
+        cmd.env("JOBS", st.jobs.to_string());
+    }
+    deps_build_env(&mut cmd);
+    own_process_group(&mut cmd);
+    Some(InstallJob { cmd, at: at.to_path_buf(), log: online_log_path(), script: Some("tools/build_online.sh") })
+}
+
+/// Start an install job: its output into its log (`<data>/install.log`, or
+/// install-online.log) and `sink`, the command line first. Returns the
+/// child's pid and the thread that ends once `sink` has its exit code.
 fn spawn_install(job: InstallJob, sink: std::sync::Arc<dyn OutputSink>) -> Result<(u32, thread::JoinHandle<()>), String> {
-    let InstallJob { mut cmd, at } = job;
-    let log = fs::File::create(install_log_path()).ok();
+    let InstallJob { mut cmd, at, log, script } = job;
+    let script = script.unwrap_or(if at.join("tools/install.sh").is_file() { "tools/install.sh" } else { "tools/rebuild.sh" });
+    let log = fs::File::create(log).ok();
     let child = cmd.spawn().map_err(|e| format!("zsh: {e}"))?;
     let pid = child.id();
-    let first = format!("$ {}   # in {}", if at.join("tools/install.sh").is_file() { "tools/install.sh" } else { "tools/rebuild.sh" }, at.display());
+    let first = format!("$ {script}   # in {}", at.display());
     if let Some(mut f) = log.as_ref().and_then(|f| f.try_clone().ok()) {
         use std::io::Write;
         let _ = writeln!(f, "{first}");
@@ -3808,12 +3915,14 @@ async fn saves_import_zip(state: State<'_, AppState>, path: String) -> Result<sa
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     // Decided before any window exists: `--prepare` (the headless install)
-    // and `--play` under RecompLauncher (RECOMPLAUNCHER=1) never start the
-    // Tauri event loop; they exit with their own codes (prepare.rs).
+    // and `--play` / `--play-online` under RecompLauncher (RECOMPLAUNCHER=1)
+    // never start the Tauri event loop; they exit with their own codes
+    // (prepare.rs).
     let args: Vec<String> = std::env::args().collect();
     let play_ok = match prepare::mode(&args, prepare::under_recomplauncher()) {
         prepare::Mode::Prepare { game } => std::process::exit(prepare::prepare_main(game.as_deref())),
         prepare::Mode::PlayDirect { game } => std::process::exit(prepare::play_direct(game.as_deref())),
+        prepare::Mode::PlayOnlineDirect { game } => std::process::exit(prepare::play_online_direct(game.as_deref())),
         prepare::Mode::Window { game } => prepare::window_game(game.as_deref()),
     };
     tauri::Builder::default()
@@ -3823,7 +3932,7 @@ pub fn run() {
             sync_app_icon(app.handle());
             let args: Vec<String> = std::env::args().collect();
             let st = app.state::<AppState>();
-            *st.play_request.lock().unwrap() = play_ok && play_shortcut::requested(args.iter().cloned());
+            *st.play_request.lock().unwrap() = play_shortcut::play_request(&args).filter(|_| play_ok);
             *st.exit_with_game.lock().unwrap() = play_shortcut::exit_requested(&args);
             *st.start_view.lock().unwrap() = play_shortcut::start_view(&args);
             Ok(())
@@ -4335,6 +4444,35 @@ mod tests {
         assert_eq!(off["PS3_FRAMECLOCK_US"], "10");
         assert_eq!(off["PS3_VBLANK_HZ"], "120");
         assert!(!off.contains_key("PS3_NET_ONLINE"));
+    }
+
+    /// `--play-online` and Play online start the game through online_run:
+    /// what reaches the game is online_env, with every forbidden variable of
+    /// the launcher's own environment (whoever started it: RecompLauncher, a
+    /// shell, Steam) taken out first. The frame rate is never the player's.
+    #[test]
+    fn online_start_keeps_the_frame_rate_whatever_the_launcher_inherits() {
+        let inherited = ["HOME", "PATH", "RECOMPLAUNCHER", "PS3_VBLANK_HZ", "PS3_FLIP_MAX_HZ", "PS3_FRAMECLOCK_US", "RES_UNLOCK_FPS", "GCM_FLIPCB_ONTICK", "PAD_SCRIPT", "PS3_NET_DNS", "PS3_NP_ONLINE_ID", "PS3_AA"].map(String::from);
+        let unset = online_unset(inherited.clone());
+        assert_eq!(unset, ["PS3_VBLANK_HZ", "PS3_FLIP_MAX_HZ", "PS3_FRAMECLOCK_US", "RES_UNLOCK_FPS", "GCM_FLIPCB_ONTICK", "PAD_SCRIPT", "PS3_NET_DNS", "PS3_NP_ONLINE_ID"]);
+        let st = Settings { online_id: "Player_01".into(), frame_clock_us: 1000, extra_env: "PS3_VBLANK_HZ=120\nRES_MENU_60FPS=1\nPS3_USLEEP_SPIN_US=500".into(), ..Default::default() };
+        let env = online_env(&st, Path::new("/Volumes/RESISTANCE_2"), Path::new("/p/online"), &InputEnv::default());
+        let cmd = game_command(&["/b/Resistance".to_string()], &env, &unset, Path::new("/p/online"));
+        let got: BTreeMap<String, Option<String>> = cmd.get_envs().map(|(k, v)| (k.to_string_lossy().into_owned(), v.map(|v| v.to_string_lossy().into_owned()))).collect();
+        for k in ["PS3_VBLANK_HZ", "PS3_FLIP_MAX_HZ", "PS3_FRAMECLOCK_US", "PS3_USLEEP_SPIN_US", "GCM_FLIPCB_ONTICK", "RES_UNLOCK_FPS", "RES_MENU_60FPS", "PAD_SCRIPT"] {
+            // removed (Some(None)) or never set (None): never a value
+            assert!(matches!(got.get(k), None | Some(None)), "{k} reaches the game online: {:?}", got.get(k));
+        }
+        assert_eq!(got["PS3_VBLANK_HZ"], None, "the inherited one is unset");
+        // online play's own values win over the inherited ones
+        assert_eq!(got["PS3_NET_DNS"].as_deref(), Some(ONLINE_DNS));
+        assert_eq!(got["PS3_NP_ONLINE_ID"].as_deref(), Some("Player_01"));
+        assert_eq!(got["PS3_NET_ONLINE"].as_deref(), Some("1"));
+        // what is not forbidden is left alone
+        assert!(!got.contains_key("HOME") && !got.contains_key("RECOMPLAUNCHER"));
+        assert_eq!(OnlineRefusal::Id.window_text(), "online-id");
+        assert_eq!(OnlineRefusal::Install.window_text(), "online-install");
+        assert_eq!(OnlineRefusal::Disc("no-disc".into()).window_text(), "no-disc");
     }
 
     fn touch(p: &Path, data: &[u8]) {

@@ -21,9 +21,18 @@
   "prepare": {
     "program": ["Resistance 2 Launcher.app/Contents/MacOS/resistance2-launcher"],
     "args": ["--prepare", "--game", "{game}"],
-    "label": "Building the game for your Mac from your disc (the first time takes 30 to 45 minutes and about 6 GB; macOS may ask once to install Apple's Command Line Tools)",
-    "timeout": 7200
+    "label": "Building the game for your Mac from your disc, then its online version from the game's free 01.60 update, downloaded from Sony (the first time takes about an hour and 10 GB; macOS may ask once to install Apple's Command Line Tools)",
+    "timeout": 10800
   },
+  "games": [
+    { "id": "campaign", "name": "Resistance 2", "args": ["--play"] },
+    {
+      "id": "online",
+      "name": "Resistance 2 — Online (PS Rewired)",
+      "args": ["--play-online"],
+      "saves": ["{home}/Library/Application Support/resistance-recomp-2/online/dev_hdd0/home/00000001/savedata"]
+    }
+  ],
   "config": [
     {
       "id": "main",
@@ -166,12 +175,14 @@
   "folders": {
     "saves": [{ "path": "{home}/Library/Application Support/resistance-recomp-2/dev_hdd0/home/00000001/savedata" }],
     "logs": [{ "path": "{home}/Library/Application Support/resistance-recomp-2" }],
-    "data": [{ "path": "{home}/Library/Application Support/resistance-recomp-2" }]
+    "data": [{ "path": "{home}/Library/Application Support/resistance-recomp-2" }],
+    "launcher": [{ "path": "{install}/Resistance 2 Launcher.app" }]
   },
   "actions": [
     { "id": "saves", "label": "Saves", "help": "Your Resistance 2 save slots, as the game writes them (BCUS98120_SAVE_...).", "open": "saves" },
     { "id": "logs", "label": "Logs", "help": "last.log (the last session), install.log (the last setup) and logs/ with the sessions before.", "open": "logs" },
-    { "id": "shaders", "label": "Shader cache", "help": "Shaders the game has built, so later sessions don't stutter. Clearing only helps if the picture looks wrong after an update.", "clear": "data/shadercache" }
+    { "id": "shaders", "label": "Shader cache", "help": "Shaders the game has built, so later sessions don't stutter. Clearing only helps if the picture looks wrong after an update.", "clear": "data/shadercache" },
+    { "id": "launcher", "label": "Resistance 2 Launcher", "help": "The port's own window (if it only shows up in Finder, double-click it). Set your online ID for online play there once, under Home > Online.", "open": "launcher" }
   ],
   "exit_codes": {
     "0": "ok",
@@ -181,6 +192,11 @@
     "43": "Building the game failed. Check there are about 6 GB free, then set it up again: it continues where it stopped. install.log in the logs folder says why.",
     "44": "Resistance 2 is already running, or another setup of it is. Close it or wait for it, then try again.",
     "45": "The game isn't built yet. Set it up again on the game's page (the first time takes 30 to 45 minutes).",
-    "46": "The Resistance 2 launcher couldn't start it. Open the launcher itself to see why."
+    "46": "The Resistance 2 launcher couldn't start it. Open the launcher itself to see why.",
+    "47": "Online play needs your online ID, the name you go by on PS Rewired (3 to 16 letters, digits, - or _, starting with a letter). Set it once in the Resistance 2 Launcher window, under Home > Online: the Resistance 2 Launcher button on the game's page opens it. Then start online again.",
+    "48": "The online version (the game's 01.60 update) isn't built yet. Set the game up again on its page: the setup builds it after the campaign (about 30 minutes and 4 GB more).",
+    "49": "Couldn't download what the online version needs (the game's official 01.60 update from Sony, or its decryption keys). The campaign plays as it is. Check the internet connection, then set the game up again on its page.",
+    "50": "Building the online version failed; the campaign plays as it is. Check there are about 4 GB free, then set the game up again on its page: it continues where it stopped. install-online.log in the logs folder says why.",
+    "51": "Play the campaign once first: its first start copies the game's data from your disc, and online play starts from that copy. Then start online again."
   }
 }

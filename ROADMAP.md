@@ -124,7 +124,12 @@ comes next. Same layout as the Resistance: Fall of Man roadmap.
   headless `--prepare` and `scripts/package-recomplauncher.sh` are in; a
   release with that zip attached, a full prepare on a clean Mac, and the
   listing on recomplauncher.com are still to do (launcher README,
-  "RecompLauncher").
+  "RecompLauncher"). Online from RecompLauncher (2026-11-12): the setup
+  builds the 01.60 version after the campaign (never failing it), an
+  Online tile runs `--play-online` without a window at the game's own
+  30 fps, the online ID is set in the launcher's window (the profile has no
+  text setting), exit codes 47-51; tested with fake inputs only, a real
+  setup and an online start from RecompLauncher are still to do.
 - [ ] Send the generic toolkit fixes upstream (per-instance workload tables,
   the lost-wake fix, overlay retirement, `ESRCH`, NV0039, the FIFO `put`
   re-read, sub-rectangle sampling).
@@ -156,7 +161,9 @@ comes next. Same layout as the Resistance: Fall of Man roadmap.
   update. So online now runs from a second build, the 01.60 update's,
   keeping 01.00 for the campaign (2026-11-12): `tools/build_online.sh`
   downloads the two official update packages, checks and extracts them and
-  builds the 01.60 executable, and the launcher's **Play online** runs it in
+  builds the 01.60 executable (decrypted by `tools/decrypt_self.py`
+  without RPCS3 since 2026-11-12: a free NPDRM licence; the result has the
+  known SHA-256), and the launcher's **Play online** runs it in
   its own folder (its own HDD folders: an empty `dev_hdd1`, since the 01.00
   install cache keeps it looping at boot, and the update's data patches,
   which it only mounts when told its HDD install exists) at the game's own

@@ -134,6 +134,12 @@ vem a seguir. Mesma organização do roadmap do Resistance: Fall of Man.
   janela do launcher e o `scripts/package-recomplauncher.sh` já estão aqui;
   falta uma release com esse zip, um prepare completo num Mac limpo e a
   listagem no recomplauncher.com (README do launcher, "RecompLauncher").
+  Online pelo RecompLauncher (12/11/2026): a instalação compila a versão
+  01.60 depois da campanha (sem nunca fazê-la falhar), um bloco Online roda
+  o `--play-online` sem janela nos 30 fps do próprio jogo, o online ID é
+  definido na janela do launcher (o perfil não tem configuração de texto),
+  códigos de saída 47 a 51; testado só com entradas falsas, falta uma
+  instalação de verdade e um início online pelo RecompLauncher.
 - [ ] Mandar as correções genéricas do toolkit para o upstream (tabelas de
   workloads por instância, a correção do despertar perdido, a aposentadoria
   de overlays, `ESRCH`, NV0039, a releitura do `put` no FIFO, a amostragem
@@ -169,7 +175,9 @@ vem a seguir. Mesma organização do roadmap do Resistance: Fall of Man.
   agora roda a partir de um segundo build, o da atualização 01.60, mantendo
   a 01.00 para a campanha (12/11/2026): o `tools/build_online.sh` baixa os
   dois pacotes oficiais da atualização, confere e extrai os dois e compila o
-  executável da 01.60, e o **Jogar online** do launcher o roda numa pasta
+  executável da 01.60 (decifrado pelo `tools/decrypt_self.py` sem o RPCS3
+  desde 12/11/2026: licença NPDRM gratuita; o resultado tem o SHA-256
+  conhecido), e o **Jogar online** do launcher o roda numa pasta
   própria (pastas de HDD próprias: um `dev_hdd1` vazio, já que o cache da
   instalação da 01.00 o deixa em laço no boot, e os patches de dados da
   atualização, que ele só monta quando ouve que a instalação no HD existe)

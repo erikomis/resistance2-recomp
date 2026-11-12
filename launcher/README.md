@@ -347,7 +347,7 @@ the top of the zip next to the .app:
   `.iso` or a folder with `PS3_GAME/` and `PS3_DISC.SFB` (checked by
   `PS3_DISC.SFB` and the serial).
 - **Setup** (`prepare`): `Resistance 2 Launcher.app/Contents/MacOS/resistance2-launcher
-  --prepare --game <copy>`, with a 2-hour limit. It runs without a window
+  --prepare --game <copy>`, with a 3-hour limit. It runs without a window
   and does what Home > Install the game does: the copy checked (read only:
   the `.iso`'s ISO 9660 `PS3_DISC.SFB`, a folder's `PARAM.SFO` and
   `PS3_DISC.SFB`) and remembered as the disc (an image attached as Game >
@@ -360,6 +360,26 @@ the top of the zip next to the .app:
   and the scripts' output as plain lines, and exits 0 only when the game's
   build is there. One at a time (`<data>/prepare.lock`). Running it again
   brings an install up to date and continues one that stopped.
+- **The online version, in the same setup**: once the campaign is built,
+  `--prepare` runs `tools/build_online.sh` in the same checkout (the
+  install's environment, `<data>/install-online.log`), the bar going on
+  from 0.62 to 0.99 with its steps ("Online: downloading the game's
+  official 01.60 update from Sony", ... "Online: compiling the online
+  version"). It is always built, not only when the player turns online on:
+  RecompLauncher runs `prepare` only at setup, before it writes any
+  setting, and has no text field for the online ID, so a setting could
+  not be read in time and building later would need another hour-long
+  setup the player would not know to start. It never fails the setup: the
+  campaign is ready either way and `--prepare` exits 0 (a non-zero code is
+  a failed setup to RecompLauncher, which would hold the campaign back
+  over a server that was down); the last line says `Ready to play, online
+  too`, or `Ready to play the campaign. The online version isn't ready:
+  <why> (starting online says so, exit code 49|50; ...)`. The outcome is
+  kept in `<data>/online-build.json`, and `--play-online` exits with its
+  code while the online version is missing. Setting the game up again
+  retries; `tools/build_online.sh` continues where it stopped (the
+  packages are kept, finished steps are skipped). `RES_NO_ONLINE=1`
+  leaves it out.
 - **Play** (`start`): `--play --game <copy>`. With `RECOMPLAUNCHER=1` (set
   by RecompLauncher) the window never opens: the copy is remembered, the
   window's Play runs (settings, save backup, `last.log`), and the
@@ -368,6 +388,27 @@ the top of the zip next to the .app:
   its Stop reaches the game. Without that variable `--play` opens the
   window and plays once it is up, as before; `--game` there is remembered
   first (a bad one is reported and the game is not started).
+- **Online** (`games`): two tiles. "Resistance 2" adds `--play` (repeated,
+  so its arguments are not empty: a tile without arguments is shown as
+  "pick the game in the recomp's own menu"); "Resistance 2 — Online (PS
+  Rewired)" adds `--play-online`, which wins over `--play`, and keeps its
+  own saves (`<data>/online/dev_hdd0/home/00000001/savedata`). With
+  `RECOMPLAUNCHER=1`, `--play-online [--game <copy>]` runs the window's
+  Play online without a window (`online_run` in `lib.rs`, shared with the
+  button: the online ID, the 01.60 build and its EBOOT.elf's SHA-256, the
+  online folder, `online_env`) and becomes the game (`exec`), with every
+  frame-rate, timing, scripted-input and network variable of the
+  launcher's own environment unset first, so online always runs at the
+  game's own 30 fps however it is started (tested). Without that variable
+  it opens the window and presses Play online once it is up. Launchers
+  older than RecompLauncher 0.90 Beta 36 ignore `games` and show one tile
+  (the campaign).
+- **The online ID**: the profile format has no text setting, so it is set
+  in this launcher's window (Home > Online). The profile's **Resistance 2
+  Launcher** button opens the folder `{install}/Resistance 2 Launcher.app`
+  (the window, or the app shown in Finder, depending on how RecompLauncher
+  opens a folder). `--play-online` without a valid ID exits 47, whose
+  message says where to set it; no ID is ever made up.
 - **Settings** (`config`, `settings`): window mode and size, V-Sync,
   resolution, upscaling, anti-aliasing, texture filtering, sharpening,
   volume, Show FPS and Keep awake, written into `launcher.json` (the same
@@ -376,7 +417,7 @@ the top of the zip next to the .app:
   `input.toml`; the logs folder is `<data>` itself, where `last.log` and
   `install.log` are.
 
-Exit codes of `--prepare` and of `--play` under RecompLauncher (`prepare.rs`,
+Exit codes of `--prepare`, and of `--play` and `--play-online` under RecompLauncher (`prepare.rs`,
 `Exit`; the profile's `exit_codes` say them to the player, word for word,
 which a test checks):
 
@@ -390,6 +431,11 @@ which a test checks):
 | 44 | another prepare, an install in the same checkout, or this game's build is running |
 | 45 | play: the game is not built yet |
 | 46 | the launcher failed on its own (its settings, starting a program) |
+| 47 | play online: no online ID, or not a valid one (set it in the window, Home > Online) |
+| 48 | play online: the online version is not built, and no setup said why |
+| 49 | play online: the last setup could not download what it needs (Sony's update packages, the decryption keys) |
+| 50 | play online: the last setup could not build it (`install-online.log`) |
+| 51 | play online: the campaign has not done its first boot's HDD install, which the online folder is copied from |
 
 Trying it without touching your own install: `HOME=<scratch folder>` moves
 `<data>` (and the folders the port is looked for in) there. A copy that is

@@ -24,8 +24,13 @@ use std::path::{Path, PathBuf};
 /// The argument that asks for the game straight away.
 pub const ARG: &str = "--play";
 
-/// With ARG: quit the launcher once that game has ended normally (the Steam
-/// shortcut).
+/// The argument that asks for online play (PS Rewired) straight away, as
+/// the window's Play online button: RecompLauncher's "Online" tile. With
+/// ARG too, it wins.
+pub const ONLINE_ARG: &str = "--play-online";
+
+/// With ARG or ONLINE_ARG: quit the launcher once that game has ended
+/// normally (the Steam shortcut).
 pub const EXIT_ARG: &str = "--exit-with-game";
 
 /// Which shortcut: the one on the Desktop, or the Steam entry's executable.
@@ -43,9 +48,27 @@ pub fn requested<I: IntoIterator<Item = String>>(args: I) -> bool {
     args.into_iter().skip(1).any(|a| a == ARG)
 }
 
-/// Whether the command line asks to quit after the game (only with ARG).
+/// Whether the command line asks for online play at once.
+pub fn online_requested(args: &[String]) -> bool {
+    args.iter().skip(1).any(|a| a == ONLINE_ARG)
+}
+
+/// What the window starts once it is up: "online" (ONLINE_ARG, which wins),
+/// "play" (ARG) or nothing.
+pub fn play_request(args: &[String]) -> Option<&'static str> {
+    if online_requested(args) {
+        Some("online")
+    } else if requested(args.iter().cloned()) {
+        Some("play")
+    } else {
+        None
+    }
+}
+
+/// Whether the command line asks to quit after the game (only with ARG or
+/// ONLINE_ARG).
 pub fn exit_requested(args: &[String]) -> bool {
-    requested(args.iter().cloned()) && args.iter().skip(1).any(|a| a == EXIT_ARG)
+    play_request(args).is_some() && args.iter().skip(1).any(|a| a == EXIT_ARG)
 }
 
 /// `--view <page>` or `--view=<page>`: the page the window opens on (for
@@ -289,6 +312,20 @@ mod tests {
         assert!(exit_requested(&args(&["l", "--play", "--exit-with-game"])));
         assert!(!exit_requested(&args(&["l", "--exit-with-game"])));
         assert!(!exit_requested(&args(&["l", "--play"])));
+        assert!(exit_requested(&args(&["l", "--play-online", "--exit-with-game"])));
+    }
+
+    #[test]
+    fn play_requests() {
+        let a = |v: &[&str]| v.iter().map(|s| s.to_string()).collect::<Vec<_>>();
+        assert_eq!(play_request(&a(&["app"])), None);
+        assert_eq!(play_request(&a(&["app", "--play"])), Some("play"));
+        assert_eq!(play_request(&a(&["app", "--play-online"])), Some("online"));
+        // RecompLauncher's Online tile: start.args, then the tile's own
+        assert_eq!(play_request(&a(&["app", "--play", "--game", "/x/r2.iso", "--play-online"])), Some("online"));
+        // the program's own name is never an argument
+        assert_eq!(play_request(&a(&["--play-online"])), None);
+        assert!(!requested(a(&["app", "--play-online"])), "--play-online is not --play");
     }
 
     #[test]

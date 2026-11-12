@@ -10,15 +10,25 @@
 //!   toolkit, venv, decrypt, analyse, lift, SPU, build). It prints
 //!   `progress <0..1> <text>` lines, the scripts' output as plain lines, and
 //!   exits with one of the codes in `Exit`, 0 only when the game's build is
-//!   there afterwards.
+//!   there afterwards. Then, in the same run and with the bar going on, the
+//!   online version (tools/build_online.sh: the game's 01.60 update from
+//!   Sony, decrypted and built beside the campaign's). That part never fails
+//!   the setup: the campaign is ready either way, the last progress line says
+//!   whether online is too, and why not; what went wrong is kept in
+//!   <data>/online-build.json for `--play-online` to say (its own exit codes).
+//!   RES_NO_ONLINE=1 leaves it out.
 //! - `--play` with `RECOMPLAUNCHER=1`: the game started at once (the same
 //!   Play as the window's button: settings, save backup, log), no window; the
 //!   launcher's process becomes the game's (exec), so its exit code and its
 //!   lifetime are the game's. `--game <copy>` uses and remembers that disc.
+//! - `--play-online` with `RECOMPLAUNCHER=1` (RecompLauncher's Online tile):
+//!   the same for the window's Play online (online_run in lib.rs: the online
+//!   ID, the 01.60 build, the online folder, online_env with its frame-rate
+//!   guarantee), or the exit code that says what is missing.
 //!
-//! Both decide in `run()` before any window or Tauri event loop exists. The
-//! install itself is the window's (install_job, spawn_install, pull_command
-//! in lib.rs); only where its output goes differs (OutputSink).
+//! All of them decide in `run()` before any window or Tauri event loop
+//! exists. The install itself is the window's (install_job, spawn_install,
+//! pull_command in lib.rs); only where its output goes differs (OutputSink).
 
 use crate::*;
 use std::collections::VecDeque;
@@ -52,11 +62,37 @@ pub enum Exit {
     NotBuilt,
     /// The launcher failed on its own (its settings, starting a program).
     Failed,
+    /// Play online: no online ID set, or not a valid one.
+    OnlineId,
+    /// Play online: the 01.60 build (or the update's files) is not there,
+    /// and no setup said why.
+    OnlineNotBuilt,
+    /// Play online: the last setup could not download what the online
+    /// version needs (Sony's update packages, the decryption keys).
+    OnlineDownload,
+    /// Play online: the last setup could not build the online version.
+    OnlineBuild,
+    /// Play online: the campaign has not done its first boot's HDD install,
+    /// which the online folder is made from.
+    OnlineInstall,
 }
 
 impl Exit {
-    #[cfg(test)]
-    pub const ALL: [Exit; 8] = [Exit::Ok, Exit::Copy, Exit::NeedsPlayer, Exit::Sources, Exit::Build, Exit::Running, Exit::NotBuilt, Exit::Failed];
+    pub const ALL: [Exit; 13] = [
+        Exit::Ok,
+        Exit::Copy,
+        Exit::NeedsPlayer,
+        Exit::Sources,
+        Exit::Build,
+        Exit::Running,
+        Exit::NotBuilt,
+        Exit::Failed,
+        Exit::OnlineId,
+        Exit::OnlineNotBuilt,
+        Exit::OnlineDownload,
+        Exit::OnlineBuild,
+        Exit::OnlineInstall,
+    ];
 
     pub fn code(self) -> i32 {
         match self {
@@ -68,7 +104,16 @@ impl Exit {
             Exit::Running => 44,
             Exit::NotBuilt => 45,
             Exit::Failed => 46,
+            Exit::OnlineId => 47,
+            Exit::OnlineNotBuilt => 48,
+            Exit::OnlineDownload => 49,
+            Exit::OnlineBuild => 50,
+            Exit::OnlineInstall => 51,
         }
+    }
+
+    fn from_code(c: i32) -> Option<Exit> {
+        Exit::ALL.into_iter().find(|e| e.code() == c)
     }
 
     /// What the player is told (recomplauncher.json's exit_codes; "ok" for
@@ -83,6 +128,11 @@ impl Exit {
             Exit::Running => "Resistance 2 is already running, or another setup of it is. Close it or wait for it, then try again.",
             Exit::NotBuilt => "The game isn't built yet. Set it up again on the game's page (the first time takes 30 to 45 minutes).",
             Exit::Failed => "The Resistance 2 launcher couldn't start it. Open the launcher itself to see why.",
+            Exit::OnlineId => "Online play needs your online ID, the name you go by on PS Rewired (3 to 16 letters, digits, - or _, starting with a letter). Set it once in the Resistance 2 Launcher window, under Home > Online: the Resistance 2 Launcher button on the game's page opens it. Then start online again.",
+            Exit::OnlineNotBuilt => "The online version (the game's 01.60 update) isn't built yet. Set the game up again on its page: the setup builds it after the campaign (about 30 minutes and 4 GB more).",
+            Exit::OnlineDownload => "Couldn't download what the online version needs (the game's official 01.60 update from Sony, or its decryption keys). The campaign plays as it is. Check the internet connection, then set the game up again on its page.",
+            Exit::OnlineBuild => "Building the online version failed; the campaign plays as it is. Check there are about 4 GB free, then set the game up again on its page: it continues where it stopped. install-online.log in the logs folder says why.",
+            Exit::OnlineInstall => "Play the campaign once first: its first start copies the game's data from your disc, and online play starts from that copy. Then start online again.",
         }
     }
 }
@@ -100,7 +150,12 @@ pub enum Mode {
     Prepare { game: Option<PathBuf> },
     /// `--play [--game <copy>]` started by RecompLauncher: the game, no window.
     PlayDirect { game: Option<PathBuf> },
-    /// The window (with `--play`: Play once it is up).
+    /// `--play-online [--game <copy>]` started by RecompLauncher: online
+    /// play, no window (it wins over `--play`: the Online tile's arguments
+    /// come after start.args).
+    PlayOnlineDirect { game: Option<PathBuf> },
+    /// The window (with `--play`: Play once it is up; with `--play-online`:
+    /// Play online).
     Window { game: Option<PathBuf> },
 }
 
@@ -124,6 +179,8 @@ pub fn mode(args: &[String], recomplauncher: bool) -> Mode {
     let game = game_arg(args);
     if args.iter().skip(1).any(|a| a == PREPARE_ARG) {
         Mode::Prepare { game }
+    } else if recomplauncher && play_shortcut::online_requested(args) {
+        Mode::PlayOnlineDirect { game }
     } else if recomplauncher && play_shortcut::requested(args.iter().cloned()) {
         Mode::PlayDirect { game }
     } else {
@@ -416,6 +473,39 @@ impl Reporter {
 pub const STEP_IDS: [&str; 9] = ["sources", "deps", "toolkit", "venv", "decrypt", "analyse", "lift", "spu", "build"];
 const WEIGHT: [f64; 9] = [1.0, 8.0, 2.0, 3.0, 2.0, 6.0, 35.0, 6.0, 37.0];
 
+/// tools/build_online.sh's steps (the online version), each one's rough
+/// share of its run (the download depends on the connection: 340 MB).
+pub const ONLINE_STEP_IDS: [&str; 8] = ["download", "extract", "stage", "decrypt", "analyse", "lift", "spu", "build"];
+const ONLINE_WEIGHT: [f64; 8] = [10.0, 5.0, 1.0, 1.0, 5.0, 36.0, 6.0, 36.0];
+
+/// A run whose "==> <step>" lines move the bar: its steps, their weights,
+/// the text under the bar for each, and the share of the whole bar it
+/// fills (the campaign's install, then the online version's).
+pub struct Plan {
+    pub ids: &'static [&'static str],
+    weights: &'static [f64],
+    text: fn(Option<&str>) -> &'static str,
+    from: f64,
+    to: f64,
+}
+
+/// The share of the bar before the install starts (the copy, the tools, the
+/// sources' update), where the campaign's install ends and the online
+/// version's starts, and where that ends ("Ready to play" is 1).
+const INSTALL_FROM: f64 = 0.04;
+const CAMPAIGN_TO: f64 = 0.62;
+const INSTALL_TO: f64 = 0.99;
+
+pub const CAMPAIGN: Plan = Plan { ids: &STEP_IDS, weights: &WEIGHT, text: stage_text, from: INSTALL_FROM, to: CAMPAIGN_TO };
+pub const ONLINE: Plan = Plan { ids: &ONLINE_STEP_IDS, weights: &ONLINE_WEIGHT, text: online_stage_text, from: CAMPAIGN_TO, to: INSTALL_TO };
+
+impl Plan {
+    /// The whole bar, for this run's own share done.
+    pub fn overall(&self, fraction: f64) -> f64 {
+        self.from + (self.to - self.from) * fraction.clamp(0.0, 1.0)
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq)]
 enum StepState {
     Pending,
@@ -438,16 +528,21 @@ struct Step {
 /// along (tools/bootstrap_deps.sh), "==> done" ends the run. Times are in
 /// seconds from any start.
 pub struct StepTracker {
-    steps: [Step; 9],
+    plan: &'static Plan,
+    steps: Vec<Step>,
 }
 
 impl Default for StepTracker {
     fn default() -> Self {
-        StepTracker { steps: [Step { state: StepState::Pending, start: 0.0, sub: None }; 9] }
+        StepTracker::new(&CAMPAIGN)
     }
 }
 
 impl StepTracker {
+    pub fn new(plan: &'static Plan) -> Self {
+        StepTracker { plan, steps: vec![Step { state: StepState::Pending, start: 0.0, sub: None }; plan.ids.len()] }
+    }
+
     fn current(&mut self) -> Option<&mut Step> {
         self.steps.iter_mut().find(|s| s.state == StepState::Running)
     }
@@ -479,7 +574,7 @@ impl StepTracker {
             self.close(StepState::Done);
             return;
         }
-        let Some(i) = STEP_IDS.iter().position(|s| *s == word) else { return };
+        let Some(i) = self.plan.ids.iter().position(|s| *s == word) else { return };
         self.close(StepState::Done);
         for s in &mut self.steps[..i] {
             if s.state == StepState::Pending {
@@ -502,12 +597,12 @@ impl StepTracker {
         }
     }
 
-    /// The share of the install done at `t`: a running step counts as far as
-    /// it says, or as half done after two minutes and at most 90 %.
+    /// The share of the run done at `t`: a running step counts as far as it
+    /// says, or as half done after two minutes and at most 90 %.
     pub fn fraction(&self, t: f64) -> f64 {
-        let total: f64 = WEIGHT.iter().sum();
+        let total: f64 = self.plan.weights.iter().sum();
         let mut done = 0.0;
-        for (s, w) in self.steps.iter().zip(WEIGHT) {
+        for (s, w) in self.steps.iter().zip(self.plan.weights) {
             match s.state {
                 StepState::Done | StepState::Skipped => done += w,
                 StepState::Running => {
@@ -522,7 +617,12 @@ impl StepTracker {
 
     /// The step running, or the one that failed.
     pub fn stage(&self) -> Option<&'static str> {
-        self.steps.iter().position(|s| matches!(s.state, StepState::Running | StepState::Error)).map(|i| STEP_IDS[i])
+        self.steps.iter().position(|s| matches!(s.state, StepState::Running | StepState::Error)).map(|i| self.plan.ids[i])
+    }
+
+    /// The whole bar at `t`, and the text under it.
+    pub fn bar(&self, t: f64) -> (f64, &'static str) {
+        (self.plan.overall(self.fraction(t)), (self.plan.text)(self.stage()))
     }
 }
 
@@ -542,14 +642,22 @@ pub fn stage_text(id: Option<&str>) -> &'static str {
     }
 }
 
-/// The share of the bar before the install starts (the copy, the tools, the
-/// sources' update) and where the install's share ends.
-const INSTALL_FROM: f64 = 0.04;
-const INSTALL_TO: f64 = 0.99;
-
-pub fn overall(install_fraction: f64) -> f64 {
-    INSTALL_FROM + (INSTALL_TO - INSTALL_FROM) * install_fraction.clamp(0.0, 1.0)
+/// An online step's text under the progress bar.
+pub fn online_stage_text(id: Option<&str>) -> &'static str {
+    match id {
+        Some("download") => "Online: downloading the game's official 01.60 update from Sony (340 MB)",
+        Some("extract") => "Online: unpacking the 01.60 update",
+        Some("stage") => "Online: putting the update's files in place",
+        Some("decrypt") => "Online: decrypting the 01.60 executable",
+        Some("analyse") => "Online: analysing the 01.60 code",
+        Some("lift") => "Online: translating the 01.60 code (the longest step)",
+        Some("spu") => "Online: translating the SPU programs",
+        Some("build") => "Online: compiling the online version",
+        _ => "Online: starting the online version's build",
+    }
 }
+
+const NETWORK: &[&str] = &["could not download", "could not resolve host", "failed to connect", "unable to access", "connection timed out", "network is unreachable", "check the internet connection and"];
 
 /// Why the install failed, from the step it stopped at and its last lines
 /// (as the window's installError tells them apart).
@@ -558,12 +666,23 @@ pub fn classify(stage: Option<&str>, tail: &[String]) -> Exit {
     let has = |n: &[&str]| n.iter().any(|x| text.contains(x));
     if has(&["another install is already running"]) {
         Exit::Running
-    } else if has(&["could not download", "could not resolve host", "failed to connect", "unable to access", "connection timed out", "network is unreachable", "check the internet connection and"]) || stage == Some("sources") {
+    } else if has(NETWORK) || stage == Some("sources") {
         Exit::Sources
     } else if has(&["the disc is not mounted"]) {
         Exit::Copy
     } else {
         Exit::Build
+    }
+}
+
+/// Why the online version's build failed: Sony's packages or the keys could
+/// not be downloaded, or anything else.
+pub fn classify_online(stage: Option<&str>, tail: &[String]) -> Exit {
+    let text = tail.join("\n").to_ascii_lowercase();
+    if NETWORK.iter().any(|x| text.contains(x)) || stage == Some("download") {
+        Exit::OnlineDownload
+    } else {
+        Exit::OnlineBuild
     }
 }
 
@@ -584,11 +703,18 @@ struct HeadlessState {
 }
 
 impl Headless {
+    fn new(plan: &'static Plan, rep: Reporter, done: mpsc::Sender<i32>) -> Self {
+        Headless {
+            st: Mutex::new(HeadlessState { steps: StepTracker::new(plan), rep, tail: VecDeque::new(), errors: Vec::new() }),
+            done: Mutex::new(Some(done)),
+            t0: Instant::now(),
+        }
+    }
+
     fn tick(&self) {
         let t = self.t0.elapsed().as_secs_f64();
         let mut st = self.st.lock().unwrap();
-        let f = overall(st.steps.fraction(t));
-        let text = stage_text(st.steps.stage());
+        let (f, text) = st.steps.bar(t);
         if let Some(l) = st.rep.update(f, text) {
             say(&l);
         }
@@ -650,18 +776,24 @@ fn take_lock() -> Result<Option<fs::File>, String> {
 }
 
 /// This game's build is running (started anywhere): a process whose command
-/// line has build/BCUS98120/ResistanceRecomp. Not the name alone: the other
+/// line has build/BCUS98120/ResistanceRecomp, or the online version's
+/// build/BCUS98120_v160/ResistanceRecomp. Not the name alone: the other
 /// Resistance ports' builds are called ResistanceRecomp too. Only looked at.
 fn game_running() -> bool {
     if cfg!(windows) {
         return process_running(GAME_EXE);
     }
     Command::new("pgrep")
-        .args(["-f", &format!("{TITLE_ID}/{GAME_EXE}( |$)")])
+        .args(["-f", &game_pattern()])
         .stdout(Stdio::null())
         .stderr(Stdio::null())
         .status()
         .is_ok_and(|s| s.success())
+}
+
+/// game_running's pgrep pattern (extended regular expression).
+fn game_pattern() -> String {
+    format!("{TITLE_ID}(_v160)?/{GAME_EXE}( |$)")
 }
 
 fn same_dir(a: &Path, b: &Path) -> bool {
@@ -794,18 +926,54 @@ pub fn run_prepare(game: Option<&Path>) -> Exit {
         }
     };
     let at = job.at.clone();
+    let (rep, result) = run_job(job, &CAMPAIGN, rep);
+    let mut rep = rep;
+    if let Err((stage, tail, why)) = result {
+        rep.fail(&why);
+        say(&format!("The install's log: {}", install_log_path().display()));
+        return classify(stage, &tail);
+    }
+    let b = resolve_builds(&at);
+    if !b.ok {
+        rep.fail(&format!("The build ended, but {} is missing.", b.missing.join(", ")));
+        return Exit::Build;
+    }
+
+    // the online version, after the campaign: never the setup's failure
+    if std::env::var_os("RES_NO_ONLINE").is_some_and(|v| v == "1") {
+        let l = rep.force(1.0, "Ready to play (the online version was left out: RES_NO_ONLINE=1)");
+        say(&l);
+        return Exit::Ok;
+    }
+    let (mut rep, online) = prepare_online(&at, rep);
+    let text = match &online {
+        Ok(()) => "Ready to play, online too".to_string(),
+        Err((e, why)) => format!(
+            "Ready to play the campaign. The online version isn't ready: {} (starting online says so, exit code {}; set the game up again to try again)",
+            why.trim_end_matches('.'),
+            e.code()
+        ),
+    };
+    let l = rep.force(1.0, &text);
+    say(&l);
+    Exit::Ok
+}
+
+/// What a step that failed left: the step, the run's last lines, and the
+/// reason to show (its last "ERROR:" line, else which step failed).
+type JobFailure = (Option<&'static str>, Vec<String>, String);
+
+/// Run an install job (the campaign's install, the online build) with its
+/// output on stdout and the bar moving through `plan`'s share, from where
+/// `rep` left it; the reporter comes back for what follows.
+fn run_job(job: InstallJob, plan: &'static Plan, rep: Reporter) -> (Reporter, Result<(), JobFailure>) {
     let (tx, rx) = mpsc::channel();
-    let sink = Arc::new(Headless {
-        st: Mutex::new(HeadlessState { steps: StepTracker::default(), rep, tail: VecDeque::new(), errors: Vec::new() }),
-        done: Mutex::new(Some(tx)),
-        t0: Instant::now(),
-    });
+    let sink = Arc::new(Headless::new(plan, rep, tx));
     let ended = match spawn_install(job, sink.clone()) {
         Ok((_, t)) => t,
         Err(e) => {
-            let mut st = sink.st.lock().unwrap();
-            st.rep.fail(&format!("Couldn't start the install: {e}"));
-            return Exit::Failed;
+            let rep = std::mem::take(&mut sink.st.lock().unwrap().rep);
+            return (rep, Err((None, Vec::new(), format!("Couldn't start it: {e}"))));
         }
     };
     // the bar moves inside a long step too (the lift, the compile)
@@ -832,48 +1000,100 @@ pub fn run_prepare(game: Option<&Path>) -> Exit {
     let mut st = sink.st.lock().unwrap();
     let ok = code == 0;
     st.steps.finish(ok);
-    if !ok {
-        let stage = st.steps.stage();
-        let tail: Vec<String> = st.tail.iter().cloned().collect();
-        let exit = classify(stage, &tail);
-        let why = st.errors.last().cloned().unwrap_or_else(|| format!("{} failed (code {code}).", stage_text(stage)));
-        st.rep.fail(&why);
-        say(&format!("The install's log: {}", install_log_path().display()));
-        return exit;
+    let rep = std::mem::take(&mut st.rep);
+    if ok {
+        return (rep, Ok(()));
     }
-    let b = resolve_builds(&at);
-    if !b.ok {
-        st.rep.fail(&format!("The build ended, but {} is missing.", b.missing.join(", ")));
-        return Exit::Build;
+    let stage = st.steps.stage();
+    let tail: Vec<String> = st.tail.iter().cloned().collect();
+    let why = st.errors.last().cloned().unwrap_or_else(|| format!("{} failed (code {code}).", (plan.text)(stage)));
+    (rep, Err((stage, tail, why)))
+}
+
+/// What the last setup's online part ended with, for `--play-online` to say
+/// when the online version is not there: <data>/online-build.json.
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
+pub struct OnlineBuildStatus {
+    pub ok: bool,
+    /// Its exit code (Exit::OnlineDownload, Exit::OnlineBuild; 0 when ok).
+    pub code: i32,
+    pub why: String,
+    /// Seconds since 1970.
+    pub at: u64,
+}
+
+fn online_status_path() -> PathBuf {
+    data_root().join("online-build.json")
+}
+
+fn write_online_status(st: &OnlineBuildStatus) {
+    if let Ok(j) = serde_json::to_string_pretty(st) {
+        let _ = fs::write(online_status_path(), j);
     }
-    let l = st.rep.force(1.0, "Ready to play");
-    say(&l);
-    Exit::Ok
+}
+
+fn read_online_status() -> Option<OnlineBuildStatus> {
+    fs::read_to_string(online_status_path()).ok().and_then(|t| serde_json::from_str(&t).ok())
+}
+
+/// The online version, built in the campaign's port folder `at` by
+/// tools/build_online.sh (prepare's second part), its outcome written to
+/// online-build.json. Err: its exit code for `--play-online` and why.
+fn prepare_online(at: &Path, mut rep: Reporter) -> (Reporter, Result<(), (Exit, String)>) {
+    let now = now_secs();
+    rep.say(ONLINE.overall(0.0), "The campaign is built. Now its online version (the game's 01.60 update, for PS Rewired)");
+    let result = match online_install_job(at) {
+        None => Err((Exit::OnlineBuild, "these sources have no tools/build_online.sh".to_string())),
+        Some(job) => {
+            let (r, res) = run_job(job, &ONLINE, rep);
+            rep = r;
+            match res {
+                Ok(()) => {
+                    let o = resolve_online(at);
+                    if o.build_ok && o.update_ok {
+                        Ok(())
+                    } else {
+                        Err((Exit::OnlineBuild, format!("the online build ended, but {} is missing.", o.missing.join(", "))))
+                    }
+                }
+                Err((stage, tail, why)) => {
+                    say(&format!("The online build's log: {}", online_log_path().display()));
+                    Err((classify_online(stage, &tail), why))
+                }
+            }
+        }
+    };
+    let (ok, code, why) = match &result {
+        Ok(()) => (true, 0, String::new()),
+        Err((e, why)) => (false, e.code(), why.clone()),
+    };
+    write_online_status(&OnlineBuildStatus { ok, code, why, at: now });
+    (rep, result)
+}
+
+/// `--game <copy>` before a direct start: checked, attached when it is an
+/// image, and remembered as the disc.
+fn use_game(game: Option<&Path>) -> Result<(), (Exit, String)> {
+    let Some(g) = game else { return Ok(()) };
+    let (copy, _) = check_copy(g).map_err(|e| (Exit::Copy, e))?;
+    if let GameCopy::Image(img) = &copy {
+        attach_image(img).map_err(|e| (Exit::Copy, format!("the disc image wouldn't mount: {e}")))?;
+    }
+    remember_disc(g).map_err(|e| (Exit::Failed, e))?;
+    Ok(())
 }
 
 /// `--play` under RecompLauncher: the copy given with `--game` remembered,
 /// then the window's Play (play_run: the settings, the save backup, the
-/// disc), and the launcher's process replaced by the game's (exec), its
-/// output in last.log (the previous one moved to logs/). Returns an exit code
-/// only when the game could not start.
+/// disc), and the launcher's process replaced by the game's (exec_game).
+/// Returns an exit code only when the game could not start.
 pub fn play_direct(game: Option<&Path>) -> i32 {
     let refuse = |e: Exit, why: &str| {
         eprintln!("[launcher] --play: {why}");
         e.code()
     };
-    if let Some(g) = game {
-        let copy = match check_copy(g) {
-            Ok((c, _)) => c,
-            Err(e) => return refuse(Exit::Copy, &e),
-        };
-        if let GameCopy::Image(img) = &copy {
-            if let Err(e) = attach_image(img) {
-                return refuse(Exit::Copy, &format!("the disc image wouldn't mount: {e}"));
-            }
-        }
-        if let Err(e) = remember_disc(g) {
-            return refuse(Exit::Failed, &e);
-        }
+    if let Err((e, why)) = use_game(game) {
+        return refuse(e, &why);
     }
     if let Err(e) = require_supported_host() {
         return refuse(Exit::NeedsPlayer, &e);
@@ -895,6 +1115,73 @@ pub fn play_direct(game: Option<&Path>) -> i32 {
     if let Some(e) = &facts.backup_error {
         eprintln!("[launcher] --play: the save backup failed: {e}");
     }
+    exec_game(run, s.keep_awake, "--play")
+}
+
+/// The exit code `--play-online` ends with when online play cannot start:
+/// for a missing online version, what the last setup said about it
+/// (online-build.json).
+pub(crate) fn online_exit(r: &OnlineRefusal, last: Option<&OnlineBuildStatus>) -> Exit {
+    match r {
+        OnlineRefusal::Id => Exit::OnlineId,
+        OnlineRefusal::Build | OnlineRefusal::Update => match last.filter(|st| !st.ok).and_then(|st| Exit::from_code(st.code)) {
+            Some(e @ (Exit::OnlineDownload | Exit::OnlineBuild)) => e,
+            _ => Exit::OnlineNotBuilt,
+        },
+        OnlineRefusal::Install => Exit::OnlineInstall,
+        OnlineRefusal::Disc(_) => Exit::Copy,
+        OnlineRefusal::Other(_) => Exit::Failed,
+    }
+}
+
+/// `--play-online` under RecompLauncher (its Online tile): the copy given
+/// with `--game` remembered, then the window's Play online (online_run: the
+/// online ID, the 01.60 build, the online folder, online_env: the game's own
+/// 30 fps, every frame-rate and timing variable left out, those of the
+/// launcher's own environment unset too), and the launcher's process
+/// replaced by the game's (exec_game). Returns an exit code only when it
+/// could not start.
+pub fn play_online_direct(game: Option<&Path>) -> i32 {
+    let refuse = |e: Exit, why: &str| {
+        eprintln!("[launcher] --play-online: {why}");
+        e.code()
+    };
+    if let Err((e, why)) = use_game(game) {
+        return refuse(e, &why);
+    }
+    if let Err(e) = require_supported_host() {
+        return refuse(Exit::NeedsPlayer, &e);
+    }
+    if game_running() {
+        return refuse(Exit::Running, "the game is already running");
+    }
+    let s = load_settings_file();
+    let mut no_caffeinate = s.clone();
+    no_caffeinate.keep_awake = false;
+    let (run, _) = match online_run(&no_caffeinate) {
+        Ok(r) => r,
+        Err(r) => {
+            let last = read_online_status();
+            let e = online_exit(&r, last.as_ref());
+            let why = match (&r, &last) {
+                (OnlineRefusal::Build | OnlineRefusal::Update, Some(st)) if !st.ok => format!("{} (the last setup: {})", r.describe(), st.why),
+                _ => r.describe(),
+            };
+            return refuse(e, &why);
+        }
+    };
+    exec_game(run, s.keep_awake, "--play-online")
+}
+
+/// The launcher's process replaced by the game's (exec): its output in
+/// last.log of the folder it runs in (the previous one moved to logs/), and
+/// `caffeinate` beside it when the settings keep the Mac awake. Returns an
+/// exit code only when it could not start (on Windows: the game's own).
+fn exec_game(run: GameRun, keep_awake: bool, what: &str) -> i32 {
+    let refuse = |e: Exit, why: &str| {
+        eprintln!("[launcher] {what}: {why}");
+        e.code()
+    };
     let (log_path, _) = match session_log(&run.dir, None) {
         Ok(l) => l,
         Err(e) => return refuse(Exit::Failed, &e),
@@ -905,11 +1192,11 @@ pub fn play_direct(game: Option<&Path>) -> i32 {
     };
     let mut cmd = game_command(&run.argv, &run.env, &run.unset, &run.dir);
     cmd.stdout(out).stderr(err);
-    eprintln!("[launcher] --play: starting the game, log {}", log_path.display());
+    eprintln!("[launcher] {what}: starting the game, log {}", log_path.display());
     #[cfg(unix)]
     {
         use std::os::unix::process::CommandExt;
-        if s.keep_awake && Path::new("/usr/bin/caffeinate").is_file() {
+        if keep_awake && Path::new("/usr/bin/caffeinate").is_file() {
             // waits for this process id, which the game keeps
             let _ = Command::new("/bin/sh")
                 .args(["-c", "/usr/bin/caffeinate -i -w \"$1\" >/dev/null 2>&1 &", "sh", &std::process::id().to_string()])
@@ -921,6 +1208,7 @@ pub fn play_direct(game: Option<&Path>) -> i32 {
     }
     #[cfg(not(unix))]
     {
+        let _ = keep_awake;
         match cmd.status() {
             Ok(st) => st.code().unwrap_or(Exit::Failed.code()),
             Err(e) => refuse(Exit::Failed, &format!("{}: {e}", run.argv[0])),
@@ -957,6 +1245,71 @@ mod tests {
         assert_eq!(mode(&args(&[]), true), Mode::Window { game: None });
         // the program's own name is never an argument
         assert_eq!(mode(&["--prepare".to_string()], false), Mode::Window { game: None });
+        // --play-online: online without a window under RecompLauncher (it wins
+        // over --play: the Online tile's arguments follow start.args), else
+        // the window, which starts it once up
+        assert_eq!(mode(&args(&["--play", "--game", "/x/r2.iso", "--play-online"]), true), Mode::PlayOnlineDirect { game: Some("/x/r2.iso".into()) });
+        assert_eq!(mode(&args(&["--play-online"]), true), Mode::PlayOnlineDirect { game: None });
+        assert_eq!(mode(&args(&["--play-online", "--game", "/x"]), false), Mode::Window { game: Some("/x".into()) });
+        assert_eq!(mode(&args(&["--prepare", "--play-online"]), true), Mode::Prepare { game: None });
+    }
+
+    /// RecompLauncher's tiles: each one's arguments after start.args ask for
+    /// the campaign (--play) and online play (--play-online) without a window.
+    #[test]
+    fn profile_tiles_start_what_they_say() {
+        let profile: serde_json::Value = serde_json::from_str(include_str!("../../../recomplauncher.json")).unwrap();
+        let strs = |v: &serde_json::Value| v.as_array().unwrap().iter().map(|a| a.as_str().unwrap().replace("{game}", "/x/r2.iso")).collect::<Vec<_>>();
+        let start = strs(&profile["start"]["args"]);
+        let games = profile["games"].as_array().unwrap();
+        assert_eq!(games.len(), 2);
+        let tile = |id: &str| games.iter().find(|g| g["id"] == id).unwrap_or_else(|| panic!("no {id} tile"));
+        let argv = |g: &serde_json::Value| std::iter::once("launcher".to_string()).chain(start.iter().cloned()).chain(strs(&g["args"])).collect::<Vec<_>>();
+        let campaign = tile("campaign");
+        assert!(!strs(&campaign["args"]).is_empty(), "a tile without args opens the game's own menu");
+        assert_eq!(mode(&argv(campaign), true), Mode::PlayDirect { game: Some("/x/r2.iso".into()) });
+        let online = tile("online");
+        assert_eq!(mode(&argv(online), true), Mode::PlayOnlineDirect { game: Some("/x/r2.iso".into()) });
+        assert!(online["name"].as_str().unwrap().contains("Online"));
+        // its saves are the online folder's own (online_dir: <play>/online)
+        assert!(online["saves"][0].as_str().unwrap().ends_with("resistance-recomp-2/online/dev_hdd0/home/00000001/savedata"));
+        // and the profile has no setting that could change the frame rate
+        for s in profile["settings"].as_array().unwrap() {
+            let keys: Vec<String> = s["choices"].as_array().into_iter().flatten().flat_map(|c| c["set"].as_object().unwrap().keys().cloned().collect::<Vec<_>>()).chain(s.get("slider").map(|sl| sl["key"].as_str().unwrap().to_string())).collect();
+            for k in keys {
+                assert!(!["frameClockUs", "extraEnv"].contains(&k.as_str()), "{k}");
+            }
+        }
+    }
+
+    #[test]
+    fn online_exit_codes() {
+        let failed = |e: Exit| OnlineBuildStatus { ok: false, code: e.code(), why: "x".into(), at: 1 };
+        let ok = OnlineBuildStatus { ok: true, code: 0, why: String::new(), at: 1 };
+        assert_eq!(online_exit(&OnlineRefusal::Id, None), Exit::OnlineId);
+        assert_eq!(online_exit(&OnlineRefusal::Install, None), Exit::OnlineInstall);
+        assert_eq!(online_exit(&OnlineRefusal::Disc("no-disc".into()), None), Exit::Copy);
+        assert_eq!(online_exit(&OnlineRefusal::Other("x".into()), None), Exit::Failed);
+        // a missing online version: what the last setup said about it
+        assert_eq!(online_exit(&OnlineRefusal::Build, None), Exit::OnlineNotBuilt);
+        assert_eq!(online_exit(&OnlineRefusal::Build, Some(&ok)), Exit::OnlineNotBuilt);
+        assert_eq!(online_exit(&OnlineRefusal::Build, Some(&failed(Exit::OnlineDownload))), Exit::OnlineDownload);
+        assert_eq!(online_exit(&OnlineRefusal::Update, Some(&failed(Exit::OnlineBuild))), Exit::OnlineBuild);
+        assert_eq!(online_exit(&OnlineRefusal::Build, Some(&failed(Exit::Build))), Exit::OnlineNotBuilt, "only the online codes");
+        assert_eq!(online_exit(&OnlineRefusal::Id, Some(&failed(Exit::OnlineBuild))), Exit::OnlineId, "the ID first");
+        let st = failed(Exit::OnlineDownload);
+        assert_eq!(serde_json::from_str::<OnlineBuildStatus>(&serde_json::to_string(&st).unwrap()).unwrap(), st);
+        // why the online build failed
+        assert_eq!(classify_online(Some("download"), &["curl: (22) The requested URL returned error: 503".into()]), Exit::OnlineDownload);
+        assert_eq!(classify_online(Some("decrypt"), &["error: could not download the decryption keys from GitHub (timed out).".into()]), Exit::OnlineDownload);
+        assert_eq!(classify_online(Some("extract"), &["curl: (6) Could not resolve host: b0.ww.np.dl.playstation.net".into()]), Exit::OnlineDownload);
+        assert_eq!(
+            classify_online(Some("decrypt"), &["ERROR: could not decrypt the 01.60 EBOOT.BIN: decrypting it without RPCS3 failed (its keys are downloaded once from RPCS3's source code on GitHub: check the internet connection), and RPCS3 is not installed to try instead.".into()]),
+            Exit::OnlineBuild
+        );
+        assert_eq!(classify_online(Some("build"), &["ninja: build stopped: subcommand failed.".into()]), Exit::OnlineBuild);
+        assert_eq!(classify_online(None, &[]), Exit::OnlineBuild);
+        assert!(game_pattern().starts_with("BCUS98120(_v160)?/"));
     }
 
     #[test]
@@ -1059,6 +1412,63 @@ mod tests {
         "==> done",
     ];
 
+    /// tools/build_online.sh's output on a fresh install, step by step.
+    const ONLINE_RUN: &[&str] = &[
+        "\x1b[1m==> download (the official 01.50 and 01.60 update packages)\x1b[0m",
+        "  UP9000-BCUS98120_00-RESISTANCE200001-A0150-V0100-PE.pkg: downloaded, checked",
+        "\x1b[1m==> extract (a few minutes)\x1b[0m",
+        "\x1b[1m==> stage (the update's files for the online folder's dev_hdd0)\x1b[0m",
+        "\x1b[1m==> decrypt (the 01.60 EBOOT.BIN)\x1b[0m",
+        "\x1b[1m==> analyse\x1b[0m",
+        "\x1b[1m==> lift\x1b[0m",
+        "\x1b[1m==> spu (policy module, raw-SPU programs, job modules, relocatable modules, raw-SPU loader)\x1b[0m",
+        "\x1b[1m==> build\x1b[0m",
+        "\x1b[1m==> done\x1b[0m",
+    ];
+
+    /// The campaign's install, then the online version's build, through one
+    /// reporter: the bar never goes back, from the first line to "Ready".
+    #[test]
+    fn online_build_continues_the_bar() {
+        let mut rep = Reporter::default();
+        let mut last = -1.0;
+        let mut texts = Vec::new();
+        for (plan, lines) in [(&CAMPAIGN, INSTALL), (&ONLINE, ONLINE_RUN)] {
+            let mut steps = StepTracker::new(plan);
+            for (i, l) in lines.iter().enumerate() {
+                let t = i as f64 * 300.0;
+                steps.feed(l, t);
+                for dt in [0.0, 30.0, 299.0] {
+                    let (f, text) = steps.bar(t + dt);
+                    assert!((plan.from..=plan.to).contains(&f), "{l}: {f}");
+                    if let Some(line) = rep.update(f, text) {
+                        assert!(line.starts_with("progress "));
+                    }
+                    assert!(rep.last() >= last, "{l}: {} < {last}", rep.last());
+                    last = rep.last();
+                    if texts.last() != Some(&text) {
+                        texts.push(text);
+                    }
+                }
+            }
+            steps.finish(true);
+            assert!((steps.bar(1e9).0 - plan.to).abs() < 1e-9);
+        }
+        assert!(texts.contains(&"Online: downloading the game's official 01.60 update from Sony (340 MB)"));
+        assert!(texts.contains(&"Online: compiling the online version"));
+        assert_eq!(rep.force(1.0, "Ready to play, online too"), "progress 1.000 Ready to play, online too");
+        // a re-run with everything done: the steps say "skipped" and the bar still only moves on
+        let mut s = StepTracker::new(&ONLINE);
+        for l in ["==> download (the update's files are staged already, skipped)", "==> lift (done before with the same inputs, skipped)", "==> build"] {
+            s.feed(l, 0.0);
+        }
+        assert_eq!(s.stage(), Some("build"));
+        assert!(s.fraction(0.0) > 0.5);
+        // a failure keeps the online step it stopped at
+        s.finish(false);
+        assert_eq!(s.stage(), Some("build"));
+    }
+
     #[test]
     fn install_steps_move_the_bar_forward() {
         let mut steps = StepTracker::default();
@@ -1069,7 +1479,7 @@ mod tests {
             let t = i as f64 * 600.0;
             steps.feed(l, t);
             for dt in [0.0, 60.0, 599.0] {
-                let f = overall(steps.fraction(t + dt));
+                let f = CAMPAIGN.overall(steps.fraction(t + dt));
                 assert!((0.0..=1.0).contains(&f));
                 rep.update(f, stage_text(steps.stage()));
                 assert!(rep.last() >= last, "{l}: {} < {last}", rep.last());
@@ -1084,7 +1494,8 @@ mod tests {
         assert_eq!(stages, ["sources", "deps", "toolkit", "venv", "decrypt", "analyse", "lift", "spu", "build"]);
         steps.finish(true);
         assert!((steps.fraction(1e9) - 1.0).abs() < 1e-9);
-        assert!((overall(1.0) - INSTALL_TO).abs() < 1e-9 && overall(0.0) == INSTALL_FROM);
+        assert!((CAMPAIGN.overall(1.0) - CAMPAIGN_TO).abs() < 1e-9 && CAMPAIGN.overall(0.0) == INSTALL_FROM);
+        assert!(CAMPAIGN_TO == ONLINE.overall(0.0) && (ONLINE.overall(1.0) - INSTALL_TO).abs() < 1e-9 && INSTALL_TO < 1.0);
 
         // an existing checkout: no sources line, so that step counts as skipped
         let mut s2 = StepTracker::default();
