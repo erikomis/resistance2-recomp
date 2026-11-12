@@ -140,7 +140,16 @@ comes next. Same layout as the Resistance: Fall of Man roadmap.
   Rewired's RPCS3 guide lists Resistance 2 with DNS `67.222.156.250` or the
   host switch `resistance2.ps3.online.scea.com=67.222.156.250`; that is the
   server name in this game's executable, and `PS3_NET_DNS` / `PS3_NET_HOSTS`
-  cover both ways. Next:
+  cover both ways. First try (2026-11-11): with those switches the disc
+  version (01.00) boots, reports itself online, gets its ticket and reaches
+  the Cooperative menu, but its own sign-in logic then answers "You've been
+  signed out of the PlayStation®Network" and never contacts the server. One
+  port bug found on the way is fixed (the game binds UDP 1900 to look for a
+  UPnP router; with another program on that port the bind failed). The RPCS3
+  netplay list reports this game working on PS Rewired with update 01.60,
+  and the Resistance: Fall of Man server only accepted that game's last
+  update, so the next step is the 01.60 update: re-lift its executable and
+  run online from that build, keeping 01.00 for the campaign. Then:
   see how far Resistance 2 gets with them, find what it asks for beyond them
   (`cellHttp`/`cellSsl`, `sceNp` matching, its own server protocol), and
   follow the community server's rules. The campaign comes first.

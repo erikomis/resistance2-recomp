@@ -153,7 +153,18 @@ vem a seguir. Mesma organização do roadmap do Resistance: Fall of Man.
   DNS `67.222.156.250` ou com a troca de host
   `resistance2.ps3.online.scea.com=67.222.156.250`; esse é o nome de servidor
   que está no executável deste jogo, e `PS3_NET_DNS` / `PS3_NET_HOSTS` cobrem
-  os dois jeitos. Depois: ver até onde o Resistance 2 chega com elas, descobrir
+  os dois jeitos. Primeira tentativa (11/11/2026): com essas chaves a versão
+  do disco (01.00) abre, se considera online, recebe o ticket e chega ao menu
+  Cooperative, mas a lógica de login do próprio jogo responde "You've been
+  signed out of the PlayStation®Network" e não chega a falar com o servidor.
+  Um erro do port achado no caminho foi corrigido (o jogo reserva a porta UDP
+  1900 para procurar um roteador UPnP; com outro programa nessa porta a
+  reserva falhava). A lista de jogo online do RPCS3 diz que este jogo
+  funciona no PS Rewired com a atualização 01.60, e o servidor do Resistance:
+  Fall of Man só aceitou a última atualização daquele jogo; então o próximo
+  passo é a atualização 01.60: traduzir de novo o executável dela e rodar o
+  online a partir dessa versão, mantendo a 01.00 para a campanha. Depois:
+  ver até onde o Resistance 2 chega com elas, descobrir
   o que ele pede além delas (`cellHttp`/`cellSsl`, matching do `sceNp`, o
   protocolo do servidor dele) e seguir as regras do servidor da comunidade.
   A campanha vem primeiro.

@@ -61,6 +61,11 @@ executable = r2_layout.executable()
 eboot = r2_layout.eboot()
 for name in ("dev_hdd0", "dev_hdd1"):
     if (source / name).is_dir():
+        # APFS clone (copy-on-write) where possible: the 2 GB copy then takes
+        # no disk space until the guest writes to it.
+        if sys.platform == "darwin" and subprocess.run(
+                ["cp", "-cR", str(source / name), str(work / name)]).returncode == 0:
+            continue
         shutil.copytree(source / name, work / name, dirs_exist_ok=True)
     else:
         (work / name).mkdir(exist_ok=True)

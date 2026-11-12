@@ -7428,7 +7428,7 @@ index c7926c0..3a0a50a 100644
      return CELL_OK;
  }
 diff --git a/libs/network/sceNp.c b/libs/network/sceNp.c
-index 697901a..bbd84db 100644
+index 697901a..7c9d19a 100644
 --- a/libs/network/sceNp.c
 +++ b/libs/network/sceNp.c
 @@ -9,6 +9,8 @@
@@ -7440,7 +7440,19 @@ index 697901a..bbd84db 100644
  #include "../../runtime/ppu/ppu_memory.h"   /* vm_write*: guest EA -> host, byte-swapped */
  #include "np_psnr.h"
  #include "../system/cellSysutil.h"
-@@ -225,6 +227,23 @@ s32 sceNpGetMyLanguages(SceNpMyLanguages* langs)
+@@ -222,9 +224,35 @@ s32 sceNpGetMyLanguages(SceNpMyLanguages* langs)
+  * Imported by most online-capable titles.
+  * -----------------------------------------------------------------------*/
+ 
++/* PS3_NP_TRACE=1: log the quiet sign-in calls (ticket reads, flags, the
++ * manager callback's events), for finding where a title gives up on PSN. */
++static int np_trace(void)
++{
++    static int t = -1;
++    if (t < 0) t = getenv("PS3_NP_TRACE") ? 1 : 0;
++    return t;
++}
++
  static SceNpManagerCallback s_npmgr_cb = NULL;
  static void*                s_npmgr_cb_arg = NULL;
  
@@ -7464,7 +7476,7 @@ index 697901a..bbd84db 100644
  s32 sceNpManagerGetStatus(s32* status)
  {
      if (!s_np_initialized)
-@@ -236,7 +255,7 @@ s32 sceNpManagerGetStatus(s32* status)
+@@ -236,7 +264,7 @@ s32 sceNpManagerGetStatus(s32* status)
       * writes to whatever host address shares that number. Same trap as
       * cellGcmSys had. Tokyo Jungle calls this during its online init. */
      /* Signed in when there is a psnr server to be signed in to. */
@@ -7473,8 +7485,13 @@ index 697901a..bbd84db 100644
      vm_write32((uint32_t)(uintptr_t)status, (uint32_t)st);
      { static s32 last = -2;
        if (st != last) printf("[sceNp] ManagerGetStatus() -> %s\n", st < 0 ? "OFFLINE" : "ONLINE");
-@@ -253,7 +272,7 @@ s32 sceNpManagerRegisterCallback(SceNpManagerCallback callback, void* arg)
-     printf("[sceNp] ManagerRegisterCallback()\n");
+@@ -250,10 +278,11 @@ s32 sceNpManagerRegisterCallback(SceNpManagerCallback callback, void* arg)
+         return SCE_NP_ERROR_NOT_INITIALIZED;
+     s_npmgr_cb     = callback;
+     s_npmgr_cb_arg = arg;
+-    printf("[sceNp] ManagerRegisterCallback()\n");
++    printf("[sceNp] ManagerRegisterCallback(cb=0x%08X arg=0x%08X)\n",
++           (u32)(uintptr_t)callback, (u32)(uintptr_t)arg);
      /* Online: tell the title it is signed in, as the console does once the
       * manager reaches ONLINE. Delivered on its next cellSysutilCheckCallback. */
 -    if (np_psnr_enabled() && callback) {
@@ -7482,7 +7499,15 @@ index 697901a..bbd84db 100644
          const u64 args[8] = { (u64)(u32)SCE_NP_MANAGER_STATUS_ONLINE, 0,
                                (u64)(u32)(uintptr_t)arg, 0, 0, 0, 0, 0 };
          cellSysutilQueueGuestCallbackArgs((u32)(uintptr_t)callback, args);
-@@ -274,6 +293,190 @@ s32 sceNpManagerGetOnlineId(SceNpOnlineId* onlineId) { return sceNpGetOnlineId(0
+@@ -263,6 +292,7 @@ s32 sceNpManagerRegisterCallback(SceNpManagerCallback callback, void* arg)
+ 
+ s32 sceNpManagerUnregisterCallback(void)
+ {
++    if (np_trace()) printf("[sceNp] ManagerUnregisterCallback()\n");
+     s_npmgr_cb     = NULL;
+     s_npmgr_cb_arg = NULL;
+     return CELL_OK;
+@@ -274,6 +304,193 @@ s32 sceNpManagerGetOnlineId(SceNpOnlineId* onlineId) { return sceNpGetOnlineId(0
  s32 sceNpManagerGetOnlineName(SceNpOnlineName* name) { return sceNpGetOnlineName(0, name); }
  s32 sceNpManagerGetAccountAge(s32* age)              { return sceNpGetAccountAge(0, age); }
  
@@ -7632,6 +7657,8 @@ index 697901a..bbd84db 100644
 +    if (!bufferSize)
 +        return SCE_NP_ERROR_INVALID_ARGUMENT;
 +    const u32 have = vm_read32((u32)(uintptr_t)bufferSize);
++    if (np_trace()) printf("[sceNp] ManagerGetTicket(buf=0x%08X, size=%u) ticket=%u\n",
++                           (u32)(uintptr_t)buffer, have, s_ticket_size);
 +    if (buffer && s_ticket_size) {
 +        if (have < s_ticket_size) return SCE_NP_ERROR_INVALID_ARGUMENT;
 +        memcpy(vm_base + (u32)(uintptr_t)buffer, s_ticket, s_ticket_size);
@@ -7646,6 +7673,7 @@ index 697901a..bbd84db 100644
 +{
 +    if (!s_np_initialized)
 +        return SCE_NP_ERROR_NOT_INITIALIZED;
++    if (np_trace()) printf("[sceNp] ManagerGetTicketParam(id=%d) ticket=%u\n", paramId, s_ticket_size);
 +    if (!param || paramId < 0 || paramId > 11)   /* SERIAL_ID .. SUBJECT_DOB */
 +        return SCE_NP_ERROR_INVALID_ARGUMENT;
 +    if (!s_ticket_size)
@@ -7673,6 +7701,22 @@ index 697901a..bbd84db 100644
  /* Parental controls: an unrestricted adult account. Unimplemented, these
   * returned OK without writing, and the title read whatever was in its stack. */
  s32 sceNpManagerGetContentRatingFlag(s32* isRestricted, s32* age)
+@@ -281,6 +498,7 @@ s32 sceNpManagerGetContentRatingFlag(s32* isRestricted, s32* age)
+     if (!s_np_initialized) return SCE_NP_ERROR_NOT_INITIALIZED;
+     if (isRestricted) vm_write32((u32)(uintptr_t)isRestricted, 0);
+     if (age) vm_write32((u32)(uintptr_t)age, 25);
++    if (np_trace()) printf("[sceNp] ManagerGetContentRatingFlag() -> unrestricted, 25\n");
+     return CELL_OK;
+ }
+ 
+@@ -288,6 +506,7 @@ s32 sceNpManagerGetChatRestrictionFlag(s32* isRestricted)
+ {
+     if (!s_np_initialized) return SCE_NP_ERROR_NOT_INITIALIZED;
+     if (isRestricted) vm_write32((u32)(uintptr_t)isRestricted, 0);
++    if (np_trace()) printf("[sceNp] ManagerGetChatRestrictionFlag() -> 0\n");
+     return CELL_OK;
+ }
+ 
 diff --git a/libs/network/sceNp.h b/libs/network/sceNp.h
 index a2318a0..72c2676 100644
 --- a/libs/network/sceNp.h
@@ -7770,7 +7814,7 @@ index d956e6d..fe1c179 100644
  
  static u32 trophy_count_unlocked(TrophyContext* ctx)
 diff --git a/libs/network/sysNet.c b/libs/network/sysNet.c
-index 87595f3..dbb94d6 100644
+index 87595f3..943d929 100644
 --- a/libs/network/sysNet.c
 +++ b/libs/network/sysNet.c
 @@ -25,6 +25,7 @@
@@ -7789,7 +7833,57 @@ index 87595f3..dbb94d6 100644
      typedef int host_socket_t;
      typedef struct pollfd host_pollfd;
      #define HOST_INVALID_SOCKET (-1)
-@@ -506,6 +508,32 @@ int32_t sys_net_bnet_accept(int32_t s, sys_net_sockaddr* addr, uint32_t* addrlen
+@@ -116,6 +118,7 @@ static int32_t fail(int32_t err)
+ {
+     s_errno = err;
+     if (s_errno_ea) vm_write32(s_errno_ea, (uint32_t)err);
++    if (err != 35 && net_trace()) printf("[sys_net] call failed, errno %d\n", err);   /* 35: EWOULDBLOCK */
+     return (int32_t)(SYS_NET_RET_BASE | (uint32_t)err);
+ }
+ 
+@@ -373,6 +376,7 @@ static int p2p_send(const void* buf, uint32_t len, const uint8_t ip[4], uint16_t
+ 
+ int32_t sys_net_bnet_close(int32_t s)
+ {
++    if (net_trace()) printf("[sys_net] close(%d)\n", s);
+     if (!valid_socket(s)) return fail(SYS_NET_EBADF);
+     if (s == s_p2p_dgram) {
+         s_p2p_dgram = -1;
+@@ -414,11 +418,31 @@ int32_t sys_net_bnet_bind(int32_t s, const sys_net_sockaddr* addr, uint32_t addr
+ #endif
+         }
+     }
+-    if (bind(s_sockets[s].host_fd, (struct sockaddr*)&a, sizeof(a)) == HOST_SOCKET_ERROR) {
++    int bound = bind(s_sockets[s].host_fd, (struct sockaddr*)&a, sizeof(a)) != HOST_SOCKET_ERROR;
++    if (!bound && !s_sockets[s].stream && !s_sockets[s].p2p) {
++        /* A datagram port another program on this machine already holds. A
++         * console has that port to itself, so titles treat the failure as
++         * fatal: Resistance 2 binds UDP 1900 (SSDP, to look for a UPnP
++         * router) while signing in, and with a music player listening there
++         * it reported "signed out of PlayStation Network" before contacting
++         * any server. Share the port, as SSDP listeners do with each other. */
++        int on = 1;
++        setsockopt(s_sockets[s].host_fd, SOL_SOCKET, SO_REUSEADDR, (const char*)&on, sizeof(on));
++#ifdef SO_REUSEPORT
++        setsockopt(s_sockets[s].host_fd, SOL_SOCKET, SO_REUSEPORT, (const char*)&on, sizeof(on));
++#endif
++        bound = bind(s_sockets[s].host_fd, (struct sockaddr*)&a, sizeof(a)) != HOST_SOCKET_ERROR;
++        if (bound) printf("[sys_net] port %u is shared with another program\n", ntohs(a.sin_port));
++    }
++    if (!bound) {
+         /* Last resort for a P2P stream socket that still can't share the
+          * port: an ephemeral one. It connects, but titles that check the
+          * source port will ignore what it sends. */
+-        if (!(s_sockets[s].p2p && s_sockets[s].stream)) return host_fail();
++        if (!(s_sockets[s].p2p && s_sockets[s].stream)) {
++            char ipf[16];
++            printf("[sys_net] bind(%d, %s:%u) failed\n", s, ip_str(&a.sin_addr, ipf), ntohs(a.sin_port));
++            return host_fail();
++        }
+         a.sin_port = 0;
+         if (bind(s_sockets[s].host_fd, (struct sockaddr*)&a, sizeof(a)) == HOST_SOCKET_ERROR)
+             return host_fail();
+@@ -506,6 +530,32 @@ int32_t sys_net_bnet_accept(int32_t s, sys_net_sockaddr* addr, uint32_t* addrlen
      return slot;
  }
  
@@ -7822,7 +7916,7 @@ index 87595f3..dbb94d6 100644
  int32_t sys_net_bnet_connect(int32_t s, const sys_net_sockaddr* addr, uint32_t addrlen)
  {
      (void)addrlen;
-@@ -523,6 +551,7 @@ int32_t sys_net_bnet_connect(int32_t s, const sys_net_sockaddr* addr, uint32_t a
+@@ -523,6 +573,7 @@ int32_t sys_net_bnet_connect(int32_t s, const sys_net_sockaddr* addr, uint32_t a
  
      char ip[16];
      printf("[sys_net] connect(%d, %s:%u)\n", s, ip_str(&a.sin_addr, ip), ntohs(a.sin_port));
@@ -7830,7 +7924,7 @@ index 87595f3..dbb94d6 100644
      if (s_sockets[s].p2p && s_sockets[s].stream) {
          /* A peer that can't take a direct connection (behind its router):
           * the stream goes through psnr's relay, and its socket replaces
-@@ -611,6 +640,25 @@ int32_t sys_net_bnet_send(int32_t s, const void* buf, uint32_t len, int32_t flag
+@@ -611,6 +662,25 @@ int32_t sys_net_bnet_send(int32_t s, const void* buf, uint32_t len, int32_t flag
      return n == HOST_SOCKET_ERROR ? host_fail() : n;
  }
  
@@ -7856,7 +7950,7 @@ index 87595f3..dbb94d6 100644
  int32_t sys_net_bnet_sendto(int32_t s, const void* buf, uint32_t len, int32_t flags,
                              const sys_net_sockaddr* to, uint32_t tolen)
  {
-@@ -619,6 +667,21 @@ int32_t sys_net_bnet_sendto(int32_t s, const void* buf, uint32_t len, int32_t fl
+@@ -619,6 +689,21 @@ int32_t sys_net_bnet_sendto(int32_t s, const void* buf, uint32_t len, int32_t fl
      if (!valid_socket(s)) return fail(SYS_NET_EBADF);
      if (!to) return sys_net_bnet_send(s, buf, len, flags);   /* connected socket */
      if (read_sockaddr(EA(to), &a)) return fail(SYS_NET_EINVAL);
@@ -7878,7 +7972,7 @@ index 87595f3..dbb94d6 100644
      if (s_sockets[s].p2p && np_psnr_p2p_route(GUEST_PTR(EA(buf), const char*), len,
                                               (const uint8_t*)&a.sin_addr, ntohs(a.sin_port)))
          return (int32_t)len;   /* went through psnr's relay */
-@@ -665,6 +728,9 @@ int32_t sys_net_bnet_recvfrom(int32_t s, void* buf, uint32_t len, int32_t flags,
+@@ -665,6 +750,9 @@ int32_t sys_net_bnet_recvfrom(int32_t s, void* buf, uint32_t len, int32_t flags,
          }
          break;
      } while (1);
@@ -7888,7 +7982,15 @@ index 87595f3..dbb94d6 100644
      if (net_trace()) trace("recvfrom", s, n, &a);
      write_sockaddr(EA(from), EA(fromlen), &a);
      if (from && s_sockets[s].p2p) vm_write16(EA(from) + 8, s_sockets[s].vport);
-@@ -983,6 +1049,124 @@ uint32_t sys_net_bnet_inet_ntoa(uint32_t addr)
+@@ -697,6 +785,7 @@ int32_t sys_net_bnet_setsockopt(int32_t s, int32_t level, int32_t optname,
+     host_socket_t fd = s_sockets[s].host_fd;
+     int val = (v_ea && optlen >= 4) ? (int)vm_read32(v_ea) : 0;
+     int ret = 0;
++    if (net_trace()) printf("[sys_net] setsockopt(%d, level 0x%X, opt 0x%X, %d)\n", s, level, optname, val);
+ 
+     if (level == SYS_NET_SOL_SOCKET) {
+         switch (optname) {
+@@ -983,6 +1072,124 @@ uint32_t sys_net_bnet_inet_ntoa(uint32_t addr)
      return ea;
  }
  
@@ -8013,7 +8115,7 @@ index 87595f3..dbb94d6 100644
  uint32_t sys_net_bnet_gethostbyname(const char* name)
  {
      const char* host = GUEST_PTR(EA(name), const char*);
-@@ -990,14 +1174,30 @@ uint32_t sys_net_bnet_gethostbyname(const char* name)
+@@ -990,14 +1197,30 @@ uint32_t sys_net_bnet_gethostbyname(const char* name)
      struct addrinfo hints, *res = NULL;
      if (!host || !h) return 0;
  
@@ -8051,7 +8153,7 @@ index 87595f3..dbb94d6 100644
  
      memset(vm_ptr8(h), 0, HOSTENT_SCRATCH);
      vm_write32(h + 0,  h + 64);           /* h_name */
-@@ -1010,8 +1210,9 @@ uint32_t sys_net_bnet_gethostbyname(const char* name)
+@@ -1010,8 +1233,9 @@ uint32_t sys_net_bnet_gethostbyname(const char* name)
      strncpy((char*)vm_ptr8(h + 64), host, HOSTENT_SCRATCH - 65);
  
      char ip[16];
@@ -9545,7 +9647,7 @@ index 286bf47..c2e5301 100644
  
  s32 cellSaveDataUserAutoLoad(u32 version, u32 userId, const char* dirName,
 diff --git a/libs/system/cellSysutil.c b/libs/system/cellSysutil.c
-index 2176d38..c73cdde 100644
+index 2176d38..5950a79 100644
 --- a/libs/system/cellSysutil.c
 +++ b/libs/system/cellSysutil.c
 @@ -7,6 +7,7 @@
@@ -9564,7 +9666,18 @@ index 2176d38..c73cdde 100644
  #endif
  
  /* Guest-memory stores — out-params from the recompiled title are guest VM
-@@ -428,6 +430,13 @@ s32 cellSysutilGetSystemParamInt(s32 id, u32 value_ea)
+@@ -144,6 +146,10 @@ static void drain_guest_completions(void)
+     COMPLETION_UNLOCK();
+     while (item) {
+         GuestCompletion* next = item->next;
++        { static int tr = -1; if (tr < 0) tr = getenv("PS3_NP_TRACE") ? 1 : 0;
++          if (tr) printf("[cellSysutil] guest callback 0x%08X(0x%llX, 0x%llX, 0x%llX)\n", item->opd,
++                         (unsigned long long)item->args[0], (unsigned long long)item->args[1],
++                         (unsigned long long)item->args[2]); }
+         g_ps3_guest_caller(item->opd, item->args[0], item->args[1], item->args[2],
+             item->args[3], item->args[4], item->args[5], item->args[6], item->args[7]);
+         free(item);
+@@ -428,6 +434,13 @@ s32 cellSysutilGetSystemParamInt(s32 id, u32 value_ea)
      case CELL_SYSUTIL_SYSTEMPARAM_ID_SUMMERTIME:     v = 0; break; /* No DST */
      case CELL_SYSUTIL_SYSTEMPARAM_ID_GAME_PARENTAL_LEVEL:           v = 0; break;
      case CELL_SYSUTIL_SYSTEMPARAM_ID_GAME_PARENTAL_LEVEL0_RESTRICT: v = 0; break;
@@ -9578,7 +9691,7 @@ index 2176d38..c73cdde 100644
      case CELL_SYSUTIL_SYSTEMPARAM_ID_CURRENT_USER_HAS_NP_ACCOUNT:   v = 1; break;
      case CELL_SYSUTIL_SYSTEMPARAM_ID_CAMERA_PLFREQ:  v = 0; break; /* 60Hz */
      case CELL_SYSUTIL_SYSTEMPARAM_ID_PAD_RUMBLE:     v = 1; break; /* Rumble on */
-@@ -560,7 +569,15 @@ s32 cellSysCacheMount(char* param)
+@@ -560,7 +573,15 @@ s32 cellSysCacheMount(char* param)
      cache_id[32] = '\0';
      printf("[cellSysutil] SysCacheMount(id='%s')\n", cache_id);
  
@@ -9595,7 +9708,7 @@ index 2176d38..c73cdde 100644
      size_t n = strlen(s_cache_path);
      if (n > 135) n = 135;
      memcpy(vm_base + ea + 0x20, s_cache_path, n);
-@@ -675,3 +692,33 @@ s32 cellSysutilIsMeetingApp(void)
+@@ -675,3 +696,33 @@ s32 cellSysutilIsMeetingApp(void)
  {
      return 0; /* Not a meeting app */
  }
@@ -26229,10 +26342,16 @@ index 4d54b72..c6d909b 100644
          const int64_t pos = (int64_t)HOST_FTELL64(f);
          if (HOST_FSEEK64(f, offset) == 0)
 diff --git a/runtime/ppu/ppu_hle.cpp b/runtime/ppu/ppu_hle.cpp
-index b44816b..78b07e7 100644
+index b44816b..8205ffa 100644
 --- a/runtime/ppu/ppu_hle.cpp
 +++ b/runtime/ppu/ppu_hle.cpp
-@@ -25,6 +25,13 @@
+@@ -21,10 +21,18 @@
+ #include "ppu_recomp.h"   /* ppu_context */
+ #include "ps3emu/nid.h"   /* ps3_nid_table, ps3_nid_entry */
+ #include "ps3emu/milestone.h" /* ps3_msf -- boot milestone log */
+-#include <stdlib.h>       /* getenv */
++#include <stdlib.h>
++#include <time.h>       /* getenv */
  #include <stdint.h>
  #include <stdio.h>
  #include <stdlib.h>       /* getenv, atoi (boot trace) */
@@ -26246,7 +26365,7 @@ index b44816b..78b07e7 100644
  
  /* Single flat NID -> handler table (all modules share it; resolution is by
   * NID which is globally unique). Sized for the firmware import surface. */
-@@ -177,6 +184,31 @@ static void ps3_hle_unresolved(uint32_t nid, ppu_context* ctx)
+@@ -177,6 +185,31 @@ static void ps3_hle_unresolved(uint32_t nid, ppu_context* ctx)
                  s_fake ? "; PS3_HLE_UNRESOLVED=fail to find load-bearing ones"
                         : "");
  
@@ -26278,7 +26397,7 @@ index b44816b..78b07e7 100644
      ctx->gpr[3] = s_fake ? 0u : (uint64_t)(uint32_t)CELL_ERROR_ERROR;
  }
  
-@@ -188,6 +220,8 @@ extern "C" void ppu_prof_stamp(void* ctx, unsigned lr);
+@@ -188,6 +221,8 @@ extern "C" void ppu_prof_stamp(void* ctx, unsigned lr);
   * what every thread is doing now (polling a pad, spinning on a lwcond, feeding
   * a decoder that never takes the data). Counts are unlocked: a lost increment
   * can't change which import is on top. */
@@ -26287,7 +26406,7 @@ index b44816b..78b07e7 100644
  static void hle_top_note(uint32_t nid, const char* name, const ppu_context* ctx, long window_s)
  {
      enum { HT_MAX = 256 };
-@@ -219,10 +253,54 @@ static void hle_top_note(uint32_t nid, const char* name, const ppu_context* ctx,
+@@ -219,10 +254,54 @@ static void hle_top_note(uint32_t nid, const char* name, const ppu_context* ctx,
          ht_n[best] = 0;
      }
      for (int j = 0; j < ht_used; j++) ht_n[j] = 0;
@@ -26342,7 +26461,44 @@ index b44816b..78b07e7 100644
      /* HLE_BT_EVERY=<n>: dump the calling thread's guest stack every nth HLE
       * call it makes. WAITBT_EVERY only samples threads that are blocking on an
       * event queue, which misses a thread that stops looping while it is BUSY --
-@@ -703,6 +781,136 @@ extern "C" void ps3_hle_call(uint32_t nid, ppu_context* ctx)
+@@ -298,6 +377,23 @@ extern "C" void ps3_hle_call(uint32_t nid, ppu_context* ctx)
+      * now, overwritten with the real name once the handler is known. */
+     g_last_hle_name = "(unimplemented)";
+ 
++    /* PS3_POKE_IF=<hexaddr>:<old>:<new> (diagnostic): whenever the guest word
++     * at addr holds `old`, replace it with `new`. Checked on every HLE call, so
++     * it lands between two frames of a title's state machine: for asking "what
++     * would the title do next if this state were X" before knowing who is
++     * supposed to set it. */
++    { static int s_pk = -1; static uint32_t pk_a, pk_o, pk_n;
++      if (s_pk < 0) { const char* e = getenv("PS3_POKE_IF"); s_pk = 0;
++          if (e) { char* q; pk_a = (uint32_t)strtoul(e, &q, 16);
++                   if (*q == ':') { pk_o = (uint32_t)strtoul(q + 1, &q, 16);
++                       if (*q == ':') { pk_n = (uint32_t)strtoul(q + 1, 0, 16); s_pk = 1; } } } }
++      static time_t pk_t0 = 0; static long pk_after = -1;
++      if (s_pk && pk_after < 0) { const char* e = getenv("PS3_POKE_AFTER_S"); pk_after = e ? atol(e) : 0; pk_t0 = time(0); }
++      if (s_pk && time(0) - pk_t0 >= pk_after && vm_read32(pk_a) == pk_o) {
++          vm_write32(pk_a, pk_n);
++          fprintf(stderr, "[poke] 0x%08X: 0x%X -> 0x%X\n", pk_a, pk_o, pk_n);
++      } }
++
+     /* Boot trace: log the first N HLE calls (PS3_HLE_TRACE=N). Invaluable for
+      * new-SDK bring-up (e.g. PSL1GHT) where the failure is "nothing happens". */
+     static int s_trace = -2;
+@@ -324,6 +420,12 @@ extern "C" void ps3_hle_call(uint32_t nid, ppu_context* ctx)
+                   nid, (uint32_t)ctx->gpr[3], (uint32_t)ctx->gpr[4], (uint32_t)ctx->gpr[5],
+                   (uint32_t)ctx->gpr[6], (uint32_t)ctx->gpr[7], (uint32_t)ctx->gpr[8],
+                   (uint32_t)ctx->gpr[9], (uint32_t)ctx->gpr[10], (uint32_t)ctx->lr);
++        /* ...and who is asking: the guest call chain, for the first few. */
++        static int _nb = 0;
++        if (PS3_LOG_FIRST(_nb, 6)) {
++            extern void ppu_dump_guest_stack(ppu_context*, const char*);
++            ppu_dump_guest_stack(ctx, "hle-args");
++        }
+       } }
+ 
+     /* sys_process_exit (abort path): dump the guest back-chain so we see WHO aborted.
+@@ -703,6 +805,136 @@ extern "C" void ps3_hle_call(uint32_t nid, ppu_context* ctx)
          }
          static int logged = 0;
          if (logged < 40) { fprintf(stderr, "[hle] unresolved NID 0x%08X\n", nid); logged++; }
@@ -26479,7 +26635,7 @@ index b44816b..78b07e7 100644
          /* cellSaveData call-shape capture: dump r3-r10 + resolve r7/r8 as OPD
           * callbacks (statCallback/fileCallback) to learn the cellSaveDataAutoLoad2
           * protocol so it can be implemented. */
-@@ -728,7 +936,7 @@ extern "C" void ps3_hle_call(uint32_t nid, ppu_context* ctx)
+@@ -728,7 +960,7 @@ extern "C" void ps3_hle_call(uint32_t nid, ppu_context* ctx)
              ctx->gpr[3]=0; /* CELL_SAVEDATA_RET_OK */
              return;
            } } }
@@ -26488,7 +26644,7 @@ index b44816b..78b07e7 100644
              extern uint32_t vm_read32(uint64_t);
              uint32_t r7=(uint32_t)ctx->gpr[7], r8=(uint32_t)ctx->gpr[8];
              uint32_t r7c=r7?vm_read32(r7):0, r8c=r8?vm_read32(r8):0;
-@@ -736,6 +944,27 @@ extern "C" void ps3_hle_call(uint32_t nid, ppu_context* ctx)
+@@ -736,6 +968,27 @@ extern "C" void ps3_hle_call(uint32_t nid, ppu_context* ctx)
                  nid,(uint32_t)ctx->gpr[3],(uint32_t)ctx->gpr[4],(uint32_t)ctx->gpr[5],(uint32_t)ctx->gpr[6],r7,r7c,r8,r8c,(uint32_t)ctx->gpr[9],(uint32_t)ctx->gpr[10]);
              /* if r4 is a dirName string, dump it */
              uint32_t r4=(uint32_t)ctx->gpr[4]; if(r4>0x10000&&r4<0x10000000){ char nm[32]; for(int i=0;i<31;i++){uint32_t b=vm_read32((r4+i)&~3u); nm[i]=(char)((b>>((3-((r4+i)&3))*8))&0xFF); if(!nm[i])break;} nm[31]=0; fprintf(stderr,"[SAVEDATA]   r4 dirName='%s'\n",nm); } }
