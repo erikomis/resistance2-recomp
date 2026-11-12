@@ -9,12 +9,12 @@ Port nativo do **Resistance 2** (PS3, disco `BCUS98120`) para
 jogo é traduzido para C/C++ e compilado como um executável nativo, com
 gráficos em Metal. Não é um emulador.
 
-**Ele chega à gameplay controlável na primeira fase.** O jogo roda do boot
-e do aviso de auto-save, pelos vídeos de abertura (nos seus 30 fps) e pelos
-menus, até o New Game, toca a cinemática da fase na engine e passa para a
-gameplay em primeira pessoa com o HUD na primeira fase (`iceland`), com a
-imagem de tela cheia correta: o jogador anda. Roda a uns 15–19 fps jogando;
-veja [Estado](#estado).
+**A campanha é jogável.** Roda do boot, pelos menus, até a campanha:
+Islândia e depois a Bay Area, perto dos 30 fps do próprio jogo num Mac com
+Apple silicon (lutas pesadas ainda caem abaixo disso), com controle ou
+teclado e mouse. O online pelos servidores da comunidade PS Rewired funciona
+pelo launcher com a atualização 01.60 do jogo (login, lobby e uma partida
+jogados em 12/11/2026). Veja [Estado](#estado).
 
 Construído sobre o [ps3recomp](https://github.com/sp00nznet/ps3recomp), com o
 toolkit, a organização e as ferramentas do
@@ -22,10 +22,11 @@ toolkit, a organização e as ferramentas do
 do mesmo autor. Veja [CREDITS.pt-BR.md](CREDITS.pt-BR.md).
 
 > [!WARNING]
-> **Trabalho em andamento, no começo.** Dá para entrar na primeira fase e
-> andar nela, mas a uns 15–19 fps, e nada depois dela foi testado; ainda não
-> é um jeito acabado de jogar. Não há releases: você mesmo compila o jogo a
-> partir do seu disco. Só macOS com Apple silicon, com controle. O que falta
+> **Trabalho em andamento.** A campanha foi jogada até a Bay Area, não até
+> o fim, e algumas cenas pesadas rodam abaixo de 30 fps. O launcher
+> ([versões](https://github.com/erikomis/resistance2-recomp/releases))
+> compila o jogo no seu Mac a partir do seu disco; nada do jogo é baixado.
+> Só macOS com Apple silicon. O que falta
 > está no [ROADMAP.pt-BR.md](ROADMAP.pt-BR.md).
 
 > **Este repositório não contém dados do jogo, firmware, chaves da Sony nem

@@ -9,12 +9,12 @@ built with static recompilation: the game's PowerPC and SPU code is
 translated to C/C++ and compiled into a native executable, with graphics on
 Metal. It is not an emulator.
 
-**It reaches controllable gameplay in the first level.** The game runs
-from the boot and the auto-save notice through the intro movies (at their
-30 fps) and the menus to New Game, plays the level's in-engine cinematic and
-hands over to first-person gameplay with the HUD in the first level
-(`iceland`), with the full-screen image correct: the player moves. It runs
-at about 15–19 fps in play; see [Status](#status).
+**The campaign is playable.** It runs from the boot through the menus into
+the campaign: Iceland, then the Bay Area, at close to the game's own 30 fps
+on an Apple-silicon Mac (heavy fights still dip below it), with a controller
+or keyboard and mouse. Online play through the PS Rewired community servers
+works from the launcher with the game's 01.60 update (sign-in, lobby and a
+match were played on 2026-11-12). See [Status](#status).
 
 Built on [ps3recomp](https://github.com/sp00nznet/ps3recomp), with the
 toolkit, the layout and the tools of the author's
@@ -22,10 +22,11 @@ toolkit, the layout and the tools of the author's
 See [CREDITS.md](CREDITS.md).
 
 > [!WARNING]
-> **Early work in progress.** The first level can be entered and walked
-> in, but at about 15–19 fps, and nothing past it has been tested; it is not
-> a finished way to play the game. There are no releases: you build the game
-> yourself from your own disc. Apple-silicon macOS only, with a controller.
+> **Work in progress.** The campaign has been played into the Bay Area,
+> not to the end, and some heavy scenes run below 30 fps. The launcher
+> ([releases](https://github.com/erikomis/resistance2-recomp/releases))
+> builds the game on your Mac from your own disc; nothing is downloaded from
+> the game. Apple-silicon macOS only.
 > What is missing is in [ROADMAP.md](ROADMAP.md).
 
 > **This repository contains no game data, no firmware, no Sony keys and
