@@ -9,7 +9,10 @@ without RPCS3.
 In this port, tools/install.sh runs it on the disc's EBOOT.BIN, with the key
 file tools/fetch_keys.py writes from RPCS3's public key table; the result is
 byte-identical to the RPCS3-decrypted EBOOT.elf the port was made from (the
-SHA-256 tools/rebuild.sh checks). It comes from the Resistance: Fall of Man
+SHA-256 tools/rebuild.sh checks). tools/build_online.sh runs it on the 01.60
+update's EBOOT.BIN (NPDRM, free licence), with tools/fetch_keys.py --npdrm's
+key file; that result is byte-identical to RPCS3's too (the SHA-256 it
+checks). It comes from the Resistance: Fall of Man
 port (and before it the same author's inFAMOUS 2 port, MIT), unchanged but
 for this paragraph and the optional NPDRM import below.
 
