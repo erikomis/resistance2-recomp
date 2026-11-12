@@ -120,6 +120,11 @@ comes next. Same layout as the Resistance: Fall of Man roadmap.
   Man port's), with a one-click install and decryption without RPCS3.
 - [ ] Test the one-click install end to end on a clean Mac; a release build
   of the launcher.
+- [ ] RecompLauncher: the profile (`recomplauncher.json`), the launcher's
+  headless `--prepare` and `scripts/package-recomplauncher.sh` are in; a
+  release with that zip attached, a full prepare on a clean Mac, and the
+  listing on recomplauncher.com are still to do (launcher README,
+  "RecompLauncher").
 - [ ] Send the generic toolkit fixes upstream (per-instance workload tables,
   the lost-wake fix, overlay retirement, `ESRCH`, NV0039, the FIFO `put`
   re-read, sub-rectangle sampling).

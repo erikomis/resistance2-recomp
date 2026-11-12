@@ -130,6 +130,10 @@ vem a seguir. Mesma organização do roadmap do Resistance: Fall of Man.
   of Man), com instalação em um clique e descriptografia sem o RPCS3.
 - [ ] Testar a instalação em um clique do começo ao fim num Mac limpo; um
   build de release do launcher.
+- [ ] RecompLauncher: o perfil (`recomplauncher.json`), o `--prepare` sem
+  janela do launcher e o `scripts/package-recomplauncher.sh` já estão aqui;
+  falta uma release com esse zip, um prepare completo num Mac limpo e a
+  listagem no recomplauncher.com (README do launcher, "RecompLauncher").
 - [ ] Mandar as correções genéricas do toolkit para o upstream (tabelas de
   workloads por instância, a correção do despertar perdido, a aposentadoria
   de overlays, `ESRCH`, NV0039, a releitura do `put` no FIFO, a amostragem
