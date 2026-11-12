@@ -148,8 +148,13 @@ comes next. Same layout as the Resistance: Fall of Man roadmap.
   UPnP router; with another program on that port the bind failed). The RPCS3
   netplay list reports this game working on PS Rewired with update 01.60,
   and the Resistance: Fall of Man server only accepted that game's last
-  update, so the next step is the 01.60 update: re-lift its executable and
-  run online from that build, keeping 01.00 for the campaign. Then:
-  see how far Resistance 2 gets with them, find what it asks for beyond them
-  (`cellHttp`/`cellSsl`, `sceNp` matching, its own server protocol), and
-  follow the community server's rules. The campaign comes first.
+  update. So online now runs from a second build, the 01.60 update's,
+  keeping 01.00 for the campaign (2026-11-12): `tools/build_online.sh`
+  downloads the two official update packages, checks and extracts them and
+  builds the 01.60 executable, and the launcher's **Play online** runs it in
+  its own folder (its own HDD folders: an empty `dev_hdd1`, since the 01.00
+  install cache keeps it looping at boot, and the update's data patches,
+  which it only mounts when told its HDD install exists) at the game's own
+  30 fps, as the server's rules require. The 01.60 build runs, signs in and
+  reaches PS Rewired's user agreement as of 2026-11-12. Still untested: the
+  lobby, the game list, a match. The campaign comes first.

@@ -335,6 +335,37 @@ with the seconds since launch. The window title shows the frame rate. Close
 the window, or press Ctrl+C in the terminal, to quit. The first boot copies
 ~354 MB of game data to the HDD folder, as the PS3 does.
 
+### Playing online
+
+Online play goes through PS Rewired, a community server that keeps
+Resistance 2's multiplayer running. It needs the game's last update, 01.60,
+as a second build beside the 01.00 one that keeps the campaign:
+
+```sh
+tools/build_online.sh       # download extract stage decrypt analyse lift spu build
+```
+
+It downloads the two official update packages (01.50 and 01.60, about
+340 MB) from Sony's update server, checks their size and SHA-1, extracts
+them, decrypts the 01.60 `EBOOT.BIN` with RPCS3 and builds it into
+`build/BCUS98120_v160/` (any step runs alone by name, as with `rebuild.sh`).
+What it writes goes to `game/BCUS98120_v160/`, `analysis/`, `recompiled/`,
+`build/` and `port/spu_v160/`, all `.gitignore`'d.
+
+Then, in the launcher, type your online ID (3 to 16 letters, digits, `-` or
+`_`, starting with a letter) and press **Play online**. It runs the 01.60
+build in its own folder (`online/` in the play folder, with its own HDD
+folders, so the campaign's install and saves are never touched; it starts
+from a copy of the campaign's HDD install, so play the campaign once first),
+and the game may only reach PS Rewired's addresses. Online always runs at
+the game's own 30 fps: the server's rules forbid raising or limiting the
+frame rate, so the launcher leaves out every frame-rate and timing switch,
+from its settings and from the extra variables. When you go online in the
+game's menu, the first screen from the server is its user agreement:
+accepting or declining it is up to you. As of 2026-11-12 the 01.60 build
+boots, signs in and reaches that screen; the lobby, the game list and a
+match are untested.
+
 ### Environment
 
 | Variable | Effect |
@@ -410,7 +441,7 @@ home paths, and checks the result applies to a clean `a6d76c8`.
 | --- | --- |
 | [`port/`](port/) | The port: `main.cpp` (boot, guest thread), `stubs.cpp`, `patches.cpp` (the front-end input hook switch, `cellHttpClientPollConnections`), `CMakeLists.txt` (with the `Resistance` window target), `config.toml`, `spu/` (`spu_workloads.c` and the policy module's `register.c`; the lifted code of the raw SPU modules and job modules, and the raw-SPU programs' `register.c`, are generated here and never committed) |
 | [`patches/`](patches/) | The toolkit patch over ps3recomp v0.17.0 |
-| [`tools/`](tools/) | `setup_toolkit.sh`, `rebuild.sh`, `play.sh`, `env.sh`, `prepare_r2_job_pm.py`, `prepare_r2_rawspu.py`, `prepare_r2_rawspu_loader.py`, `regen_r2_jobmods.sh`, `extract_jobmods_elf.py`, `apply_r2_frontend_patch.py`, `r2_input_probe.py`, `compare_r2_logs.py`, `export_toolkit_patch.sh`, `r2_layout.py` |
+| [`tools/`](tools/) | `setup_toolkit.sh`, `rebuild.sh`, `build_online.sh`, `play.sh`, `env.sh`, `prepare_r2_job_pm.py`, `prepare_r2_rawspu.py`, `prepare_r2_rawspu_loader.py`, `regen_r2_jobmods.sh`, `extract_jobmods_elf.py`, `apply_r2_frontend_patch.py`, `r2_input_probe.py`, `compare_r2_logs.py`, `export_toolkit_patch.sh`, `r2_layout.py` |
 | [`ROADMAP.md`](ROADMAP.md) | Status and next steps |
 
 ## License

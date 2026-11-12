@@ -326,6 +326,17 @@ input[type=range]:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 4px rg
 .play-btn.stop .ico-play { display: none; }
 .play-btn.stop .ico-stop { display: block; }
 .play-btn:disabled { filter: grayscale(0.7); box-shadow: none; }
+/* Play online: the same shape, quieter, beside Play */
+.play-online-btn {
+  display: inline-flex; align-items: center; gap: 10px; padding: 0 24px 0 20px; height: 60px; border-radius: 10px;
+  font-family: var(--display); font-size: 17px; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase;
+  color: #ffd9cf; border: 1px solid rgba(255, 138, 107, 0.7); background: rgba(232, 85, 58, 0.12);
+}
+.play-online-btn .ico { width: 18px; height: 18px; fill: currentColor; stroke: none; }
+.play-online-btn:hover:not(:disabled) { background: rgba(232, 85, 58, 0.24); border-color: #ffb09b; }
+.play-online-btn:disabled { filter: grayscale(0.8); opacity: 0.6; }
+#online-id { width: 11em; }
+#online-list { margin: 8px 0; font-size: 12px; }
 .home-msg { color: var(--muted); font-size: 12px; margin-top: 12px; max-width: 760px; word-break: break-word; }
 .home-msg:empty { display: none; }
 #not-installed h2 { font-size: 22px; margin: 4px 0 6px; }

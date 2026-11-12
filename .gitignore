@@ -68,6 +68,13 @@ port/spu/jobmods_manifest.json
 generated_spu/
 ppu_hle_nids.cpp
 port/recompiled/
+# The game's 01.60 update (tools/build_online.sh, online play): the packages,
+# what is extracted from them and the decrypted EBOOT go to
+# game/BCUS98120_v160/, the analysis, the lift and the build to
+# analysis/, recompiled/ and build/BCUS98120_v160 (all ignored above); its SPU
+# code to port/spu_v160/
+port/spu_v160/
+*.part
 
 # Firmware and keys
 fw/

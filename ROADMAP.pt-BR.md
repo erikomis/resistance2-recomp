@@ -161,10 +161,15 @@ vem a seguir. Mesma organização do roadmap do Resistance: Fall of Man.
   1900 para procurar um roteador UPnP; com outro programa nessa porta a
   reserva falhava). A lista de jogo online do RPCS3 diz que este jogo
   funciona no PS Rewired com a atualização 01.60, e o servidor do Resistance:
-  Fall of Man só aceitou a última atualização daquele jogo; então o próximo
-  passo é a atualização 01.60: traduzir de novo o executável dela e rodar o
-  online a partir dessa versão, mantendo a 01.00 para a campanha. Depois:
-  ver até onde o Resistance 2 chega com elas, descobrir
-  o que ele pede além delas (`cellHttp`/`cellSsl`, matching do `sceNp`, o
-  protocolo do servidor dele) e seguir as regras do servidor da comunidade.
-  A campanha vem primeiro.
+  Fall of Man só aceitou a última atualização daquele jogo. Então o online
+  agora roda a partir de um segundo build, o da atualização 01.60, mantendo
+  a 01.00 para a campanha (12/11/2026): o `tools/build_online.sh` baixa os
+  dois pacotes oficiais da atualização, confere e extrai os dois e compila o
+  executável da 01.60, e o **Jogar online** do launcher o roda numa pasta
+  própria (pastas de HDD próprias: um `dev_hdd1` vazio, já que o cache da
+  instalação da 01.00 o deixa em laço no boot, e os patches de dados da
+  atualização, que ele só monta quando ouve que a instalação no HD existe)
+  nos 30 fps do próprio jogo, como as regras do servidor exigem. Em
+  12/11/2026 o build 01.60 roda, faz login e chega ao contrato de uso do PS
+  Rewired. Ainda não testados: o lobby, a lista de partidas, uma partida. A
+  campanha vem primeiro.

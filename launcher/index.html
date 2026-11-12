@@ -68,6 +68,10 @@
                   <svg class="ico ico-play"><use href="#i-play" /></svg><svg class="ico ico-stop"><use href="#i-stop" /></svg>
                   <span id="play-label" data-i18n="home.play">Jogar</span>
                 </button>
+                <button id="play-online" class="play-online-btn" data-i18n-title="online.playHint">
+                  <svg class="ico ico-play"><use href="#i-play" /></svg>
+                  <span data-i18n="home.playOnline">Jogar online</span>
+                </button>
                 <button id="hero-capture" class="primary hidden" data-i18n="report.capture">Capturar este quadro</button>
                 <span id="run-state" class="pill warm hidden"><span class="pulse"></span><span id="run-state-text" data-i18n="home.running">Em execução</span></span>
               </div>
@@ -159,6 +163,20 @@
               <span class="switch"><input id="q-awake" type="checkbox" /><i></i></span>
             </label>
             <button class="link more" data-go="graphics"><span data-i18n="home.allGraphics">Todas as opções de gráficos</span> →</button>
+          </div>
+
+          <div class="card" id="online-card">
+            <h3 class="card-title" data-i18n="online.title">Online (PS Rewired)</h3>
+            <div class="opt compact">
+              <label class="opt-label" for="online-id" data-i18n="online.id">Seu online ID</label>
+              <input id="online-id" type="text" maxlength="16" spellcheck="false" autocomplete="off" />
+            </div>
+            <p id="online-state" class="small"></p>
+            <dl id="online-list" class="status-list"></dl>
+            <p class="small muted" data-i18n="online.note"></p>
+            <div class="row links">
+              <button id="online-rules" class="link" data-i18n="online.rules">Regras do servidor</button>
+            </div>
           </div>
 
           <div class="card">

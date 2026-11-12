@@ -216,6 +216,9 @@ pub struct Settings {
     pub save_backups_keep: u32,
     /// Look for a new launcher version and new port sources on start.
     pub auto_update_check: bool,
+    /// "Play online": the name the player goes by on PS Rewired's servers
+    /// (PS3_NP_ONLINE_ID; see valid_online_id). Empty = not set.
+    pub online_id: String,
 }
 
 impl Default for Settings {
@@ -292,6 +295,7 @@ impl Default for Settings {
             jobs: 0,
             save_backups_keep: 10,
             auto_update_check: true,
+            online_id: String::new(),
         }
     }
 }
@@ -850,6 +854,71 @@ fn port_root(s: &Settings) -> Option<PathBuf> {
         return Some(PathBuf::from(p));
     }
     find_port_dirs_now().into_iter().find(|b| b.ok || b.rebuild_sh.is_some()).map(|b| PathBuf::from(b.root))
+}
+
+/// The build directory of the game's 01.60 update (online play), beside the
+/// 01.00 one in both layouts.
+const ONLINE_BUILD: &str = "BCUS98120_v160";
+
+/// The 01.60 update's files "Play online" puts into its own dev_hdd0, under
+/// game/BCUS98120/ (the update's PARAM.SFO and EBOOT.BIN, and the data
+/// patches 01.50 and 01.60 add).
+const ONLINE_UPDATE_FILES: &[&str] = &["PARAM.SFO", "USRDIR/EBOOT.BIN", "USRDIR/data/patch_01.psarc", "USRDIR/data/patch_03.psarc"];
+
+/// What "Play online" runs: the 01.60 build (tools/build_online.sh), its
+/// decrypted EBOOT.elf and the update's files, laid out as dev_hdd0 is.
+#[derive(Serialize, Clone, Debug, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct OnlineBuilds {
+    /// build/BCUS98120_v160/ResistanceRecomp
+    eboot: Option<String>,
+    /// game/BCUS98120_v160/EBOOT.elf, or game_v160/EBOOT.elf in the
+    /// development tree
+    eboot_elf: Option<String>,
+    /// The window host: the 01.60 build's own, else the 01.00 build's (the
+    /// same program; it only opens the window and starts the game's build).
+    host: Option<String>,
+    /// The folder holding game/BCUS98120/<ONLINE_UPDATE_FILES>:
+    /// game/BCUS98120_v160/hdd0, or updates/hdd0_v160 in the development tree.
+    update: Option<String>,
+    /// The build, its EBOOT.elf and a window host are there.
+    build_ok: bool,
+    /// Every one of the update's files is there.
+    update_ok: bool,
+    missing: Vec<String>,
+}
+
+fn resolve_online(root: &Path) -> OnlineBuilds {
+    let file = |p: PathBuf| Some(p).filter(|p| p.is_file());
+    let b = root.join("build").join(ONLINE_BUILD);
+    let eboot = file(b.join(GAME_EXE));
+    let host = if USES_HOST { file(b.join(HOST_EXE)).or_else(|| file(root.join("build").join(TITLE_ID).join(HOST_EXE))) } else { None };
+    // this repository's layout first (tools/build_online.sh), then the
+    // development tree's
+    let eboot_elf = file(root.join("game").join(ONLINE_BUILD).join("EBOOT.elf")).or_else(|| file(root.join("game_v160/EBOOT.elf")));
+    let has_update = |d: &Path| ONLINE_UPDATE_FILES.iter().all(|f| d.join("game").join(TITLE_ID).join(f).is_file());
+    let update = [root.join("game").join(ONLINE_BUILD).join("hdd0"), root.join("updates/hdd0_v160")].into_iter().find(|d| has_update(d));
+    let mut missing = Vec::new();
+    for (what, v) in [
+        (format!("build/{ONLINE_BUILD}/{GAME_EXE}"), eboot.is_some()),
+        (format!("build/{ONLINE_BUILD}/{HOST_EXE}"), host.is_some() || !USES_HOST),
+        (format!("game/{ONLINE_BUILD}/EBOOT.elf"), eboot_elf.is_some()),
+        (format!("game/{ONLINE_BUILD}/hdd0"), update.is_some()),
+    ] {
+        if !v {
+            missing.push(what);
+        }
+    }
+    let o = |p: &Option<PathBuf>| p.as_deref().map(s);
+    OnlineBuilds {
+        build_ok: eboot.is_some() && eboot_elf.is_some() && (host.is_some() || !USES_HOST),
+        update_ok: update.is_some(),
+        eboot: o(&eboot),
+        eboot_elf: o(&eboot_elf),
+        host: o(&host),
+        update: o(&update),
+        missing,
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -1506,9 +1575,9 @@ fn play(app: AppHandle, state: State<'_, AppState>, diagnostic: Option<bool>) ->
 
 fn start_game(app: AppHandle, state: State<'_, AppState>, diagnostic: Option<bool>) -> Result<PlayStarted, String> {
     require_supported_host()?;
-    let mut slot = state.game.lock().unwrap();
+    let slot = state.game.lock().unwrap();
     if slot.is_some() {
-        return Err("the game is already running".into());
+        return Err("game-running".into());
     }
     let s = load_settings_file();
     let root = port_root(&s).ok_or("no port folder: pick it in Advanced > Install / rebuild")?;
@@ -1517,36 +1586,10 @@ fn start_game(app: AppHandle, state: State<'_, AppState>, diagnostic: Option<boo
         return Err(format!("missing in {}: {}", b.root, b.missing.join(", ")));
     }
     let play = play_dir(&s);
-    let mut mounted = None;
-    let disc = match find_disc(&s) {
-        Some(d) => d,
-        None if s.auto_mount && !s.disc_image.trim().is_empty() => {
-            let d = attach_image(Path::new(s.disc_image.trim()))?;
-            mounted = Some(self::s(&d));
-            d
-        }
-        None => return Err("no-disc".into()),
-    };
-    if disc_title_id(&disc).as_deref() != Some(TITLE_ID) {
-        return Err(format!("{}: not a {TITLE_ID} disc", disc.display()));
-    }
-    for d in ["dev_hdd0", "dev_hdd1", "logs"] {
-        fs::create_dir_all(play.join(d)).map_err(|e| format!("{}: {e}", play.display()))?;
-    }
+    let (disc, mounted) = player_disc(&s)?;
+    let argv = launch_argv(&s, &b)?;
     let first = first_boot(&play);
     let report_dir = if diagnostic.unwrap_or(false) { Some(report::create(&reports_dir(), &saves::stamp(now_secs()))?) } else { None };
-    // last.log: the previous session's moves to logs/ (tools/play.sh); a
-    // debug session keeps its log in its own folder
-    let previous_log = if report_dir.is_none() { rotate_log(&play.join(LOG_NAME), &sessions_dir(&play), LOG_KEEP) } else { None };
-    let log_path = match &report_dir {
-        Some(d) => d.join(report::LOG),
-        None => play.join(LOG_NAME),
-    };
-    // the game writes <log>.raw; a thread stamps each line into <log>
-    let raw_path = log_path.with_extension("log.raw");
-    let stamped = fs::File::create(&log_path).map_err(|e| format!("{}: {e}", log_path.display()))?;
-    let log = fs::File::create(&raw_path).map_err(|e| format!("{}: {e}", raw_path.display()))?;
-    let log2 = log.try_clone().map_err(|e| e.to_string())?;
 
     // the saves as they are now, before the game can touch them
     let (backup, backup_error) = match saves::backup_before_play(&save_locations(&s), s.save_backups_keep, now_secs()) {
@@ -1554,14 +1597,89 @@ fn start_game(app: AppHandle, state: State<'_, AppState>, diagnostic: Option<boo
         Err(e) => (None, Some(e)),
     };
 
-    let argv = launch_argv(&s, &b)?;
     let mut env = launch_env(&s, &disc, &play, &input_env());
     if let Some(d) = &report_dir {
         env.extend(report::env(d)); // after the extra variables: the report's paths win
     }
+    let run = GameRun { argv, env, unset: Vec::new(), dir: play, report_dir: report_dir.clone(), builds: b, disc };
+    let started = spawn_game(&app, &state, slot, run)?;
+    Ok(PlayStarted {
+        log: s_(&started.log),
+        backup,
+        backup_error,
+        report: report_dir.map(|d| s_(&d)),
+        mounted,
+        first_boot: first,
+        previous_log: started.previous_log.map(|p| s_(&p)),
+    })
+}
+
+/// The player's disc for a game start: the one found, else the image
+/// attached now when the settings allow it (`Some(mount point)` then);
+/// "no-disc" when there is neither, an error when it is not BCUS98120.
+fn player_disc(s: &Settings) -> Result<(PathBuf, Option<String>), String> {
+    let (disc, mounted) = match find_disc(s) {
+        Some(d) => (d, None),
+        None if s.auto_mount && !s.disc_image.trim().is_empty() => {
+            let d = attach_image(Path::new(s.disc_image.trim()))?;
+            let m = self::s(&d);
+            (d, Some(m))
+        }
+        None => return Err("no-disc".into()),
+    };
+    if disc_title_id(&disc).as_deref() != Some(TITLE_ID) {
+        return Err(format!("{}: not a {TITLE_ID} disc", disc.display()));
+    }
+    Ok((disc, mounted))
+}
+
+/// What a game start runs, for spawn_game: the program and the environment
+/// it gets on top of the launcher's own (`unset`: names taken out of the
+/// launcher's own first), the folder it runs in (its last.log and logs/ go
+/// there), and the debug-mode session folder.
+struct GameRun {
+    argv: Vec<String>,
+    env: Vec<(String, String)>,
+    unset: Vec<String>,
+    dir: PathBuf,
+    report_dir: Option<PathBuf>,
+    /// For the debug session's system.txt.
+    builds: Builds,
+    disc: PathBuf,
+}
+
+struct GameStarted {
+    log: PathBuf,
+    /// Where the previous session's log went (logs/session-<date>.log).
+    previous_log: Option<PathBuf>,
+}
+
+/// Start a game, as Play and Play online do: tools/play.sh's last.log (the
+/// previous one moved to logs/, each line stamped), the process in its own
+/// group with its pid in `slot` (the game slot, locked by the caller since it
+/// checked it was free), the debug session's bookkeeping, and "game-exit"
+/// when it ends.
+fn spawn_game(app: &AppHandle, state: &State<'_, AppState>, mut slot: std::sync::MutexGuard<'_, Option<u32>>, run: GameRun) -> Result<GameStarted, String> {
+    let GameRun { argv, env, unset, dir, report_dir, builds, disc } = run;
+    for d in ["dev_hdd0", "dev_hdd1", "logs"] {
+        fs::create_dir_all(dir.join(d)).map_err(|e| format!("{}: {e}", dir.display()))?;
+    }
+    // last.log: the previous session's moves to logs/ (tools/play.sh); a
+    // debug session keeps its log in its own folder
+    let previous_log = if report_dir.is_none() { rotate_log(&dir.join(LOG_NAME), &sessions_dir(&dir), LOG_KEEP) } else { None };
+    let log_path = match &report_dir {
+        Some(d) => d.join(report::LOG),
+        None => dir.join(LOG_NAME),
+    };
+    // the game writes <log>.raw; a thread stamps each line into <log>
+    let raw_path = log_path.with_extension("log.raw");
+    let stamped = fs::File::create(&log_path).map_err(|e| format!("{}: {e}", log_path.display()))?;
+    let log = fs::File::create(&raw_path).map_err(|e| format!("{}: {e}", raw_path.display()))?;
+    let log2 = log.try_clone().map_err(|e| e.to_string())?;
+
     let mut cmd = Command::new(&argv[0]);
     cmd.args(&argv[1..])
-        .current_dir(&play)
+        .current_dir(&dir)
         .env("PATH", tool_path())
         .env_remove("PS3RECOMP_METAL_HEADLESS")
         .env_remove("PS3RECOMP_HOST_SURFACES")
@@ -1570,6 +1688,9 @@ fn start_game(app: AppHandle, state: State<'_, AppState>, diagnostic: Option<boo
         .stdin(Stdio::null())
         .stdout(log)
         .stderr(log2);
+    for k in &unset {
+        cmd.env_remove(k);
+    }
     for (k, v) in &env {
         cmd.env(k, v);
     }
@@ -1590,16 +1711,16 @@ fn start_game(app: AppHandle, state: State<'_, AppState>, diagnostic: Option<boo
     if let Some(d) = &report_dir {
         *state.report.lock().unwrap() = Some((d.clone(), true));
         session_event(d, "start", &format!("pid={}", child.id()));
-        let (d2, b2, disc2, now) = (d.clone(), b.clone(), disc.clone(), started);
+        let (d2, now) = (d.clone(), started);
         let env2 = env.clone();
         let argv2 = argv.clone();
         thread::spawn(move || {
-            let _ = fs::write(d2.join(report::SYSTEM), system_info(&b2, &disc2, &env2, &argv2, now));
+            let _ = fs::write(d2.join(report::SYSTEM), system_info(&builds, &disc, &env2, &argv2, now));
         });
         spawn_ticker(app.clone(), d.clone());
     }
     let a = app.clone();
-    let session = report_dir.clone();
+    let session = report_dir;
     thread::spawn(move || {
         let status = child.wait();
         let code = status.as_ref().ok().and_then(|s| s.code()).unwrap_or(-1);
@@ -1621,15 +1742,239 @@ fn start_game(app: AppHandle, state: State<'_, AppState>, diagnostic: Option<boo
             a.exit(0);
         }
     });
-    Ok(PlayStarted {
-        log: s_(&log_path),
-        backup,
-        backup_error,
-        report: report_dir.map(|d| s_(&d)),
-        mounted,
-        first_boot: first,
-        previous_log: previous_log.map(|p| s_(&p)),
-    })
+    Ok(GameStarted { log: log_path, previous_log })
+}
+
+// ---------------------------------------------------------------------------
+// Online play (PS Rewired)
+// ---------------------------------------------------------------------------
+
+/// PS Rewired, the community revival whose servers run Resistance 2's online
+/// play: its DNS answers the game's old server names with its servers, and
+/// these three are the only addresses the game may reach online
+/// (PS3_NET_ALLOW). The game's own server name is pinned to it as well
+/// (PS3_NET_HOSTS). See the ROADMAP, "Online multiplayer".
+const ONLINE_DNS: &str = "67.222.156.250";
+const ONLINE_ALLOW: &str = "67.222.156.250,67.222.156.251,67.222.156.252";
+const ONLINE_HOSTS: &str = "resistance2.ps3.online.scea.com=67.222.156.250";
+/// The LAN address the game is told it has, instead of this computer's own
+/// (as in the Resistance: Fall of Man port).
+const ONLINE_LOCAL_IP: &str = "192.168.1.100";
+/// Where the 01.60 update's executable sits on the console's HDD: the game
+/// is told it booted from there, as an installed update does.
+const ONLINE_BOOT_PATH: &str = "/dev_hdd0/game/BCUS98120/USRDIR/EBOOT.BIN";
+/// SHA-256 of the decrypted 01.60 EBOOT.elf the 01.60 build is made from
+/// (tools/r2_layout.py EBOOT_BUILDS, tools/build_online.sh).
+const ONLINE_ELF_SHA: &str = "697bd1df98f79ce099e54e0e60e0a1744d3950ea43a2a06978f69a91e51b3d41";
+
+/// Online play's own folder: its dev_hdd0 (a copy of the campaign's HDD
+/// install with the 01.60 update's files over it, and its own saves),
+/// dev_hdd1 (empty at first: the 01.00 install cache keeps the 01.60 game
+/// looping at boot), shader cache, last.log and logs/. Nothing of the
+/// campaign's is changed by playing online.
+fn online_dir(s: &Settings) -> PathBuf {
+    play_dir(s).join("online")
+}
+
+/// PSN online-ID rules: 3-16 letters, digits, '-' or '_', starting with a letter.
+fn valid_online_id(id: &str) -> bool {
+    let b = id.as_bytes();
+    (3..=16).contains(&b.len()) && b[0].is_ascii_alphabetic() && b.iter().all(|c| c.is_ascii_alphanumeric() || *c == b'-' || *c == b'_')
+}
+
+/// What online play never takes from the settings, the extra variables or
+/// the launcher's own environment:
+/// - the frame rate, the game's speed and its timing (PS Rewired's rules
+///   forbid raising or limiting the frame rate: online runs at the game's own
+///   30 fps): the vblank rate, the flip cap, the frame clock, the short-sleep
+///   spin, the flip callback on the vblank tick, the pad clock, and the
+///   unlock-fps switches the Resistance: Fall of Man port has;
+/// - scripted input (PAD_*) and memory pokes (diagnostics only);
+/// - which executable, data and HDD folders run, and the campaign's level
+///   select: online_env sets these itself;
+/// - who the player is to the servers and how the game reaches them
+///   (PS3_NET_*, PS3_NP_*, the psnr server, the console ID, the user):
+///   online_env sets these itself too.
+fn online_forbidden(k: &str) -> bool {
+    matches!(
+        k,
+        "PS3_VBLANK_HZ"
+            | "PS3_FLIP_MAX_HZ"
+            | "PS3_FRAMECLOCK_US"
+            | "PS3_USLEEP_SPIN_US"
+            | "GCM_FLIPCB_ONTICK"
+            | "RES_UNLOCK_FPS"
+            | "RES_MENU_60FPS"
+            | "RES_GAME_VERSION"
+            | "PS3_HDD0_ROOT"
+            | "PS3_HDD1_ROOT"
+            | "PS3_GAMEDATA_ROOT"
+            | "PS3_USRDIR_BASE"
+            | "PS3_BOOT_PATH"
+            | "PS3_GAMEDATA_ISNEW"
+            | "PS3_DISCGAME_BOOT"
+            | "PS3_ARGV"
+            | "RES_LEVEL"
+            | "RES_SPAWN_DATA"
+            | "RES_SPAWN_KEEP"
+            | "PSNR_SERVER"
+            | "PS3_OPEN_PSID"
+            | "PS3_USER_ID"
+    ) || ["PS3_NET_", "PS3_NP_", "PAD_", "PS3_POKE", "PPU_POKE", "PPU_FORCE_READ"].iter().any(|p| k.starts_with(p))
+}
+
+/// Play's environment for the online folder without anything online_forbidden
+/// names, then online play's own: the online folder's HDDs, the 01.60
+/// update's boot path with its data patches mounted (PS3_GAMEDATA_ISNEW=0:
+/// the HDD install is there), real sockets, signed in as the online ID with a
+/// locally made ticket, PS Rewired's DNS and server name, and the guards (only
+/// its addresses, a generic LAN address, no UPnP requests to the router).
+fn online_env(s: &Settings, disc: &Path, online: &Path, input: &InputEnv) -> Vec<(String, String)> {
+    let mut env: Vec<(String, String)> = launch_env(s, disc, online, input).into_iter().filter(|(k, _)| !online_forbidden(k)).collect();
+    for (k, v) in [
+        ("PS3_HDD0_ROOT", s_(&online.join("dev_hdd0"))),
+        ("PS3_HDD1_ROOT", s_(&online.join("dev_hdd1"))),
+        ("PS3_BOOT_PATH", ONLINE_BOOT_PATH.into()),
+        ("PS3_GAMEDATA_ISNEW", "0".into()),
+        ("PS3_NET_ONLINE", "1".into()),
+        ("PS3_NP_SIGNIN", "1".into()),
+        ("PS3_NP_ONLINE_ID", s.online_id.trim().into()),
+        ("PS3_NET_DNS", ONLINE_DNS.into()),
+        ("PS3_NET_HOSTS", ONLINE_HOSTS.into()),
+        ("PS3_NET_ALLOW", ONLINE_ALLOW.into()),
+        ("PS3_NET_LOCAL_IP", ONLINE_LOCAL_IP.into()),
+        ("PS3_NET_NO_UPNP", "1".into()),
+    ] {
+        env.push((k.to_string(), v));
+    }
+    env
+}
+
+/// Copy every file under `from` into `to` that is missing there or of
+/// another size (an interrupted copy), except the paths in `skip` (relative
+/// to `from`): an APFS clone (`cp -c`, no extra disk space) where it works, a
+/// plain copy otherwise. Returns how many it copied.
+fn clone_tree(from: &Path, to: &Path, skip: &[&str]) -> Result<usize, String> {
+    clone_tree_at(from, to, Path::new(""), skip)
+}
+
+fn clone_tree_at(from: &Path, to: &Path, rel: &Path, skip: &[&str]) -> Result<usize, String> {
+    let mut n = 0;
+    let rd = fs::read_dir(from).map_err(|e| format!("{}: {e}", from.display()))?;
+    for e in rd.flatten() {
+        let (src, dst, r) = (e.path(), to.join(e.file_name()), rel.join(e.file_name()));
+        let Ok(ft) = e.file_type() else { continue };
+        if skip.iter().any(|s| Path::new(s) == r) {
+            continue;
+        }
+        if ft.is_dir() {
+            n += clone_tree_at(&src, &dst, &r, skip)?;
+        } else if ft.is_file() {
+            let len = e.metadata().map(|m| m.len()).ok();
+            if fs::metadata(&dst).map(|m| m.len()).ok() == len {
+                continue;
+            }
+            fs::create_dir_all(to).map_err(|e| format!("{}: {e}", to.display()))?;
+            let _ = fs::remove_file(&dst);
+            let cloned = cfg!(target_os = "macos") && Command::new("/bin/cp").arg("-c").arg(&src).arg(&dst).stderr(Stdio::null()).status().is_ok_and(|s| s.success());
+            if !cloned {
+                fs::copy(&src, &dst).map_err(|e| format!("{} -> {}: {e}", src.display(), dst.display()))?;
+            }
+            n += 1;
+        }
+    }
+    Ok(n)
+}
+
+/// Make the online folder ready for the 01.60 game: its own dev_hdd0 with
+/// the campaign's HDD install copied from `play` the first time (the files
+/// the first boot copies from the disc; never the saves) and the update's
+/// files from `update` over it; an empty dev_hdd1 of its own. "online-install"
+/// when the campaign has not done its HDD install yet.
+fn prepare_online_dir(play: &Path, online: &Path, update: &Path) -> Result<(), String> {
+    for d in ["dev_hdd0", "dev_hdd1", "logs"] {
+        fs::create_dir_all(online.join(d)).map_err(|e| format!("{}: {e}", online.display()))?;
+    }
+    let game = game_data_dir(online);
+    if first_boot(online) {
+        if first_boot(play) {
+            return Err("online-install".into());
+        }
+        // not the files the update replaces (the 01.00 PARAM.SFO above the
+        // 01.60 one would be taken for it when both had the same size)
+        clone_tree(&game_data_dir(play), &game, ONLINE_UPDATE_FILES)?;
+    }
+    clone_tree(&update.join("game").join(TITLE_ID), &game, &[])?;
+    Ok(())
+}
+
+fn file_sha256(p: &Path) -> Option<String> {
+    let o = Command::new("/usr/bin/shasum").args(["-a", "256"]).arg(p).output().ok()?;
+    if !o.status.success() {
+        return None;
+    }
+    String::from_utf8(o.stdout).ok()?.split_whitespace().next().map(str::to_string)
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OnlineStarted {
+    log: String,
+    /// The disc was mounted from the image for this game.
+    mounted: Option<String>,
+    previous_log: Option<String>,
+}
+
+/// "Play online": the 01.60 build with the 01.60 EBOOT.elf in the online
+/// folder with online_env, through the same window host, log and session
+/// machinery as Play. Errors the window explains itself: "online-id" (none
+/// set, or not a valid one), "online-build" (the 01.60 build, its EBOOT.elf
+/// or a window host missing, or the EBOOT.elf is not the 01.60 one),
+/// "online-update" (the update's files missing), "online-install" (the
+/// campaign's HDD install not done yet), "game-running", "no-disc".
+#[tauri::command]
+fn play_online(app: AppHandle, state: State<'_, AppState>) -> Result<OnlineStarted, String> {
+    let r = start_online(app, state);
+    match &r {
+        Ok(p) => eprintln!("[launcher] Play online: started, log {}", p.log),
+        Err(e) => eprintln!("[launcher] Play online refused: {e}"),
+    }
+    r
+}
+
+fn start_online(app: AppHandle, state: State<'_, AppState>) -> Result<OnlineStarted, String> {
+    require_supported_host()?;
+    let slot = state.game.lock().unwrap();
+    if slot.is_some() {
+        return Err("game-running".into());
+    }
+    let s = load_settings_file();
+    if !valid_online_id(s.online_id.trim()) {
+        return Err("online-id".into());
+    }
+    let root = port_root(&s).ok_or("online-build")?;
+    let o = resolve_online(&root);
+    if !o.build_ok {
+        return Err("online-build".into());
+    }
+    let (Some(update), Some(elf)) = (o.update.clone(), o.eboot_elf.clone()) else {
+        return Err("online-update".into());
+    };
+    if cfg!(unix) && file_sha256(Path::new(&elf)).as_deref() != Some(ONLINE_ELF_SHA) {
+        return Err("online-build".into());
+    }
+    // the online folder before the disc, so a refusal leaves no image attached
+    let online = online_dir(&s);
+    prepare_online_dir(&play_dir(&s), &online, Path::new(&update))?;
+    let (disc, mounted) = player_disc(&s)?;
+    let builds = Builds { root: self::s(&root), host: o.host.clone(), eboot: o.eboot.clone(), eboot_elf: Some(elf), ok: true, ..Default::default() };
+    let argv = launch_argv(&s, &builds)?;
+    let env = online_env(&s, &disc, &online, &input_env());
+    // nothing forbidden online comes from the launcher's own environment either
+    let unset: Vec<String> = std::env::vars_os().filter_map(|(k, _)| k.into_string().ok()).filter(|k| online_forbidden(k)).collect();
+    let run = GameRun { argv, env, unset, dir: online, report_dir: None, builds, disc };
+    let started = spawn_game(&app, &state, slot, run)?;
+    Ok(OnlineStarted { log: s_(&started.log), mounted, previous_log: started.previous_log.map(|p| s_(&p)) })
 }
 
 /// Stop: SIGTERM to what Play started (the window host closes the game, then
@@ -1672,6 +2017,12 @@ pub struct Status {
     data_root: String,
     /// The first boot's HDD install has not completed in the play folder.
     first_boot: bool,
+    /// Online play: the 01.60 build and the update's files (None without a
+    /// port folder), its folder, and whether the HDD install it copies is
+    /// there (the campaign's, or already in the online folder).
+    online: Option<OnlineBuilds>,
+    online_dir: String,
+    online_install: bool,
     host_supported: bool,
     /// The port's build for this system is untested (Windows).
     experimental: bool,
@@ -1690,7 +2041,9 @@ async fn get_status(app: AppHandle, state: State<'_, AppState>) -> Result<Status
     let rebuild_running = state.rebuild.lock().unwrap().is_some();
     let app2 = app.clone();
     let st = tauri::async_runtime::spawn_blocking(move || {
-        let builds = port_root(&s).map(|r| resolve_builds(&r));
+        let root = port_root(&s);
+        let builds = root.as_deref().map(resolve_builds);
+        let online = root.as_deref().map(resolve_online);
         let features = builds.as_ref().map(|b| build_features(b, &app2.state::<AppState>().features)).unwrap_or_default();
         let (icon, pic1) = disc_art(&s);
         let play = play_dir(&s);
@@ -1709,6 +2062,9 @@ async fn get_status(app: AppHandle, state: State<'_, AppState>) -> Result<Status
             other_game_running: orun,
             rebuild_running,
             first_boot: first_boot(&play),
+            online,
+            online_dir: self::s(&online_dir(&s)),
+            online_install: !first_boot(&play) || !first_boot(&online_dir(&s)),
             play_dir: self::s(&play),
             data_root: self::s(&data_root()),
             host_supported: host_supported(),
@@ -2803,7 +3159,7 @@ fn pull_sources(app: AppHandle, state: State<'_, AppState>) -> Result<(), String
 // Links, files, the log
 // ---------------------------------------------------------------------------
 
-const URL_ALLOWED: &[&str] = &["https://rpcs3.net/", "https://brew.sh/", "https://github.com/erikomis/resistance2-recomp", "https://github.com/sp00nznet/ps3recomp"];
+const URL_ALLOWED: &[&str] = &["https://rpcs3.net/", "https://psrewired.com/", "https://brew.sh/", "https://github.com/erikomis/resistance2-recomp", "https://github.com/sp00nznet/ps3recomp"];
 
 #[tauri::command]
 fn open_url(url: String) -> Result<(), String> {
@@ -3319,6 +3675,7 @@ pub fn run() {
             cancel_rebuild,
             launch_preview,
             play,
+            play_online,
             stop_game,
             reveal,
             log_paths,
@@ -3692,6 +4049,209 @@ mod tests {
         for k in ["PS3_WINDOW_MODE", "PS3_INPUT_MODE", "PS3_AA", "PS3_RES_SCALE", "PS3_DISPLAY", "PS3_LUT_STRENGTH", "PS3_INPUT_MAP"] {
             assert!(!e.contains_key(k), "{k}");
         }
+    }
+
+    #[test]
+    fn online_ids_follow_the_psn_rules() {
+        for ok in ["abc", "Player_01", "a-b-c", "x234567890123456"] {
+            assert!(valid_online_id(ok), "{ok}");
+        }
+        for bad in ["", "ab", "1abc", "_abc", "-abc", "abc def", "x2345678901234567", "ação", "a.b", "abc\n"] {
+            assert!(!valid_online_id(bad), "{bad:?}");
+        }
+    }
+
+    /// The names online_env sets itself (each once, with online play's value).
+    const ONLINE_OWN: &[&str] = &[
+        "PS3_HDD0_ROOT",
+        "PS3_HDD1_ROOT",
+        "PS3_BOOT_PATH",
+        "PS3_GAMEDATA_ISNEW",
+        "PS3_NET_ONLINE",
+        "PS3_NP_SIGNIN",
+        "PS3_NP_ONLINE_ID",
+        "PS3_NET_DNS",
+        "PS3_NET_HOSTS",
+        "PS3_NET_ALLOW",
+        "PS3_NET_LOCAL_IP",
+        "PS3_NET_NO_UPNP",
+    ];
+
+    #[test]
+    fn online_env_never_changes_the_frame_rate() {
+        let extras = [
+            "PS3_VBLANK_HZ=120",
+            "PS3_FLIP_MAX_HZ=60",
+            "PS3_FRAMECLOCK_US=10",
+            "PS3_USLEEP_SPIN_US=500",
+            "GCM_FLIPCB_ONTICK=1",
+            "RES_UNLOCK_FPS=1",
+            "RES_MENU_60FPS=1",
+            "PAD_CLOCK=flips",
+            "PAD_SCRIPT=10:0x4000",
+            "PS3_POKE_IF=013802B0:2:3",
+            "PPU_POKE_ADDR=01380468",
+            "PS3_NET_ALLOW=1.2.3.4",
+            "PS3_NET_DNS=8.8.8.8",
+            "PS3_NP_ONLINE_ID=someone",
+            "PSNR_SERVER=127.0.0.1:36100",
+            "PS3_OPEN_PSID=00000000000000000000000000000001",
+            "PS3_HDD1_ROOT=/campaign/dev_hdd1",
+            "PS3_BOOT_PATH=/dev_bdvd/PS3_GAME/USRDIR/EBOOT.BIN",
+            "RES_LEVEL=3",
+            "PS3_AA=fxaa",
+        ];
+        let st = Settings { online_id: " Player_01 ".into(), frame_clock_us: 1000, vsync: false, extra_env: extras.join("\n"), ..Default::default() };
+        let v = online_env(&st, Path::new("/Volumes/RESISTANCE_2"), Path::new("/p/online"), &InputEnv::default());
+        // nothing forbidden comes through, from the settings or the extras;
+        // only online play's own values, once each
+        for (k, _) in &v {
+            assert!(!online_forbidden(k) || ONLINE_OWN.contains(&k.as_str()), "{k} passed online");
+        }
+        for k in ONLINE_OWN {
+            assert!(online_forbidden(k), "{k} could come from the extra variables");
+            assert_eq!(v.iter().filter(|(n, _)| n == k).count(), 1, "{k}");
+        }
+        let e: BTreeMap<String, String> = v.into_iter().collect();
+        for k in [
+            "PS3_VBLANK_HZ",
+            "PS3_FLIP_MAX_HZ",
+            "PS3_FRAMECLOCK_US",
+            "PS3_USLEEP_SPIN_US",
+            "GCM_FLIPCB_ONTICK",
+            "RES_UNLOCK_FPS",
+            "RES_MENU_60FPS",
+            "PAD_CLOCK",
+            "PAD_SCRIPT",
+            "PS3_POKE_IF",
+            "PPU_POKE_ADDR",
+            "PSNR_SERVER",
+            "PS3_OPEN_PSID",
+            "RES_LEVEL",
+            "PS3_ARGV",
+        ] {
+            assert!(!e.contains_key(k), "{k} passed online");
+        }
+        // the network and sign-in, always
+        assert_eq!(e["PS3_HDD0_ROOT"], "/p/online/dev_hdd0");
+        assert_eq!(e["PS3_HDD1_ROOT"], "/p/online/dev_hdd1");
+        assert_eq!(e["PS3_BOOT_PATH"], "/dev_hdd0/game/BCUS98120/USRDIR/EBOOT.BIN");
+        assert_eq!(e["PS3_GAMEDATA_ISNEW"], "0");
+        assert_eq!(e["PS3_NET_ONLINE"], "1");
+        assert_eq!(e["PS3_NP_SIGNIN"], "1");
+        assert_eq!(e["PS3_NP_ONLINE_ID"], "Player_01");
+        assert_eq!(e["PS3_NET_DNS"], "67.222.156.250");
+        assert_eq!(e["PS3_NET_HOSTS"], "resistance2.ps3.online.scea.com=67.222.156.250");
+        assert_eq!(e["PS3_NET_ALLOW"], "67.222.156.250,67.222.156.251,67.222.156.252");
+        assert_eq!(e["PS3_NET_LOCAL_IP"], ONLINE_LOCAL_IP);
+        assert_eq!(e["PS3_NET_NO_UPNP"], "1");
+        // the disc, the online folder's shader cache, and the other settings
+        // and extra variables as for Play
+        assert_eq!(e["PS3_VFS_ROOT"], "/Volumes/RESISTANCE_2");
+        assert_eq!(e["PS3_SHADER_CACHE"], "/p/online/shadercache");
+        assert_eq!(e["PS3_VSYNC"], "0");
+        assert_eq!(e["PS3_AA"], "fxaa");
+        // and Play itself still gets them (offline, nothing is taken away)
+        let off: BTreeMap<String, String> = launch_env(&st, Path::new("/d"), Path::new("/p"), &InputEnv::default()).into_iter().collect();
+        assert_eq!(off["PS3_FRAMECLOCK_US"], "10");
+        assert_eq!(off["PS3_VBLANK_HZ"], "120");
+        assert!(!off.contains_key("PS3_NET_ONLINE"));
+    }
+
+    fn touch(p: &Path, data: &[u8]) {
+        fs::create_dir_all(p.parent().unwrap()).unwrap();
+        fs::write(p, data).unwrap();
+    }
+
+    #[test]
+    fn online_builds_in_both_layouts() {
+        // this repository: build/, game/BCUS98120_v160/{EBOOT.elf,hdd0}
+        let root = tmp("online-repo");
+        let o = resolve_online(&root);
+        assert!(!o.build_ok && !o.update_ok && o.missing.len() == if USES_HOST { 4 } else { 3 });
+        touch(&root.join("build/BCUS98120_v160").join(GAME_EXE), b"x");
+        touch(&root.join("game/BCUS98120_v160/EBOOT.elf"), b"x");
+        assert_eq!(resolve_online(&root).build_ok, !USES_HOST, "no window host yet");
+        // the 01.00 build's window host serves when the 01.60 build has none
+        touch(&root.join("build/BCUS98120").join(HOST_EXE), b"x");
+        let o = resolve_online(&root);
+        assert!(o.build_ok);
+        if USES_HOST {
+            assert!(o.host.as_deref().unwrap().ends_with("build/BCUS98120/Resistance"));
+            touch(&root.join("build/BCUS98120_v160").join(HOST_EXE), b"x");
+            assert!(resolve_online(&root).host.unwrap().ends_with("build/BCUS98120_v160/Resistance"));
+        }
+        // the update's files: all four, or it is not there
+        let upd = root.join("game/BCUS98120_v160/hdd0/game/BCUS98120");
+        for f in ONLINE_UPDATE_FILES {
+            assert!(!resolve_online(&root).update_ok);
+            touch(&upd.join(f), b"u");
+        }
+        let o = resolve_online(&root);
+        assert!(o.update_ok && o.missing.is_empty(), "{:?}", o.missing);
+        assert!(o.update.unwrap().ends_with("game/BCUS98120_v160/hdd0"));
+        fs::remove_dir_all(&root).unwrap();
+
+        // the development tree: game_v160/EBOOT.elf, updates/hdd0_v160
+        let dev = tmp("online-dev");
+        for f in ["build/BCUS98120_v160/ResistanceRecomp", "build/BCUS98120_v160/Resistance", "game_v160/EBOOT.elf"] {
+            touch(&dev.join(f), b"x");
+        }
+        for f in ONLINE_UPDATE_FILES {
+            touch(&dev.join("updates/hdd0_v160/game/BCUS98120").join(f), b"u");
+        }
+        if !cfg!(windows) {
+            let o = resolve_online(&dev);
+            assert!(o.build_ok && o.update_ok);
+            assert!(o.eboot_elf.unwrap().ends_with("game_v160/EBOOT.elf"));
+            assert!(o.update.unwrap().ends_with("updates/hdd0_v160"));
+        }
+        fs::remove_dir_all(&dev).unwrap();
+    }
+
+    #[test]
+    fn online_folder_is_its_own() {
+        let st = Settings { play_dir: "/p".into(), ..Default::default() };
+        assert_eq!(online_dir(&st), Path::new("/p/online"));
+
+        let d = tmp("online-dir");
+        let (play, online, update) = (d.join("play"), d.join("play/online"), d.join("hdd0"));
+        for f in ONLINE_UPDATE_FILES {
+            touch(&update.join("game/BCUS98120").join(f), format!("01.60 {f}").as_bytes());
+        }
+        // the campaign has not done its HDD install yet
+        assert_eq!(prepare_online_dir(&play, &online, &update), Err("online-install".into()));
+        let g = game_data_dir(&play);
+        for m in HDD_INSTALL_MARKERS {
+            touch(&g.join(m), b"install");
+        }
+        touch(&g.join("PARAM.SFO"), b"01.00 PARAM.SFO"); // the same size as the 01.60 one
+        touch(&play.join("dev_hdd0/home/00000001/savedata/BCUS98120_SAVE_00/SYS.DAT"), b"save");
+        touch(&play.join("dev_hdd1/cache/cache.idx"), b"01.00 cache");
+        prepare_online_dir(&play, &online, &update).unwrap();
+        let og = game_data_dir(&online);
+        for m in HDD_INSTALL_MARKERS {
+            assert_eq!(fs::read(og.join(m)).unwrap(), b"install");
+        }
+        assert!(!first_boot(&online));
+        // the update's files over the install, its PARAM.SFO winning
+        for f in ONLINE_UPDATE_FILES {
+            assert_eq!(fs::read(og.join(f)).unwrap(), format!("01.60 {f}").as_bytes(), "{f}");
+        }
+        // no saves, an empty dev_hdd1, and the campaign untouched
+        assert!(!online.join("dev_hdd0/home").exists());
+        assert_eq!(fs::read_dir(online.join("dev_hdd1")).unwrap().count(), 0);
+        assert_eq!(fs::read(g.join("PARAM.SFO")).unwrap(), b"01.00 PARAM.SFO");
+        assert!(!g.join("USRDIR/EBOOT.BIN").exists());
+        // again: nothing to copy; a file cut short is copied again
+        assert_eq!(clone_tree(&update.join("game/BCUS98120"), &og, &[]).unwrap(), 0);
+        fs::write(og.join("USRDIR/data/patch_03.psarc"), b"01").unwrap();
+        prepare_online_dir(&play, &online, &update).unwrap();
+        assert_eq!(fs::read(og.join("USRDIR/data/patch_03.psarc")).unwrap(), b"01.60 USRDIR/data/patch_03.psarc");
+        // once the online folder has the install, the campaign's is not needed
+        fs::remove_dir_all(&g).unwrap();
+        prepare_online_dir(&play, &online, &update).unwrap();
+        fs::remove_dir_all(&d).unwrap();
     }
 
     #[test]

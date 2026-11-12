@@ -83,6 +83,7 @@ export interface Settings {
   jobs: number;
   saveBackupsKeep: number;
   autoUpdateCheck: boolean;
+  onlineId: string;
 }
 interface Builds {
   root: string;
@@ -93,6 +94,16 @@ interface Builds {
   missing: string[];
   rebuildSh: string | null;
   builtAt: number;
+}
+/** Play online: the game's 01.60 update build and the update's files. */
+interface OnlineBuilds {
+  eboot: string | null;
+  ebootElf: string | null;
+  host: string | null;
+  update: string | null;
+  buildOk: boolean;
+  updateOk: boolean;
+  missing: string[];
 }
 interface DiscInfo {
   root: string | null;
@@ -123,6 +134,10 @@ interface Status {
   dataRoot: string;
   /** The first boot's HDD install (~354 MB from the disc) has not completed. */
   firstBoot: boolean;
+  /** Play online: the 01.60 build and the update's files (null without a port folder), its folder, and whether the HDD install it starts from is there. */
+  online: OnlineBuilds | null;
+  onlineDir: string;
+  onlineInstall: boolean;
   hostSupported: boolean;
   /** The port's build for this system is untested (Windows). */
   experimental: boolean;
@@ -536,6 +551,11 @@ function bindSettings() {
   bindText("play-dir", "playDir", () => refreshStatus());
   bindText("extra-env", "extraEnv");
   bindText("audio-device", "audioDevice");
+  bindText("online-id", "onlineId", () => renderOnline());
+  $<HTMLInputElement>("online-id").addEventListener("input", (e) => {
+    settings.onlineId = (e.target as HTMLInputElement).value.trim();
+    renderOnline();
+  });
   syncers.push(syncPreset);
   syncPreset();
   $("preset").addEventListener("change", () => {
@@ -808,6 +828,7 @@ function renderHome() {
   document.body.classList.toggle("os-windows", status.os === "windows");
   renderSteam();
   renderStatusList();
+  renderOnline();
   renderReport();
   renderUpdates();
 
@@ -872,11 +893,24 @@ async function startGame(diagnostic: boolean) {
       (r.backupError ? t("home.backupFailed", { e: r.backupError }) : "");
     $("report-msg").textContent = "";
   } catch (e) {
-    const err = String(e);
-    msg.textContent = err === "no-disc" ? t("block.discText") : err;
+    msg.textContent = refusal(String(e));
   }
   await refreshStatus();
   refreshReport();
+}
+
+/** What Play and Play online answer when they do not start, in words. */
+const REFUSALS: Record<string, Key> = {
+  "no-disc": "block.discText",
+  "game-running": "home.gameRunning",
+  "online-id": "online.needId",
+  "online-build": "online.needBuild",
+  "online-update": "online.needUpdate",
+  "online-install": "online.needInstall",
+};
+function refusal(err: string): string {
+  const k = REFUSALS[err];
+  return k ? t(k) : err;
 }
 
 $("play").addEventListener("click", async () => {
@@ -886,6 +920,66 @@ $("play").addEventListener("click", async () => {
   }
   await startGame(false);
 });
+
+// ---- online play (PS Rewired) ------------------------------------------------------
+/** PSN online-ID rules, as the launcher checks them (valid_online_id). */
+function validOnlineId(id: string): boolean {
+  return /^[A-Za-z][A-Za-z0-9_-]{2,15}$/.test(id);
+}
+
+/** What still keeps Play online from starting, the first one only (null: ready). */
+function onlineMissing(): Key | null {
+  if (!status) return null;
+  const id = (settings.onlineId ?? "").trim();
+  if (!validOnlineId(id)) return id ? "online.badId" : "online.needId";
+  if (!status.online?.buildOk) return "online.needBuild";
+  if (!status.online.updateOk) return "online.needUpdate";
+  if (!status.onlineInstall) return "online.needInstall";
+  return null;
+}
+
+function renderOnline() {
+  if (!status) return;
+  const o = status.online;
+  const missing = onlineMissing();
+  const state = $("online-state");
+  state.textContent = t(missing ?? "online.ready");
+  state.className = "small " + (missing ? "warn-text" : "ok-text");
+  const rows: [Key, string, string?][] = [
+    ["online.st.build", t(o?.buildOk ? "online.st.found" : "online.st.missing"), o?.buildOk ? "ok-text" : "warn-text"],
+    ["online.st.update", t(o?.updateOk ? "online.st.filesFound" : "online.st.filesMissing"), o?.updateOk ? "ok-text" : "warn-text"],
+    ["online.st.folder", tilde(status.onlineDir)],
+  ];
+  const dl = $("online-list");
+  dl.replaceChildren();
+  for (const [k, v, cls] of rows) {
+    const dt = document.createElement("dt");
+    dt.textContent = t(k);
+    const dd = document.createElement("dd");
+    dd.textContent = v;
+    if (cls) dd.className = cls;
+    dl.append(dt, dd);
+  }
+  $<HTMLButtonElement>("play-online").disabled = gameRunning || rebuildRunning || !status.hostSupported || !!missing;
+}
+
+async function startOnline() {
+  const msg = $("home-msg");
+  // the online ID as typed, saved before the launcher reads it
+  window.clearTimeout(saveTimer);
+  settings.onlineId = $<HTMLInputElement>("online-id").value.trim();
+  try {
+    await invoke("save_settings", { settings });
+    const r = await invoke<{ log: string; mounted: string | null; previousLog: string | null }>("play_online");
+    gameRunning = true;
+    msg.textContent = t("online.started", { log: tilde(r.log) }) + (r.mounted ? " " + t("home.mounted", { dir: r.mounted }) : "");
+  } catch (e) {
+    msg.textContent = refusal(String(e));
+  }
+  await refreshStatus();
+}
+$("play-online").addEventListener("click", startOnline);
+$("online-rules").addEventListener("click", () => invoke("open_url", { url: "https://psrewired.com/" }));
 
 $("make-shortcut").addEventListener("click", async () => {
   const btn = $<HTMLButtonElement>("make-shortcut");

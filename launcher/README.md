@@ -77,12 +77,13 @@ next time the game starts.
 - **Home / Início**: a hero with the player's own disc art when it is
   mounted, else a plain styled title; "BCUS98120 · version 01.00" and the
   build date; **Play** (Stop while the game runs; **Capture this frame** in
-  debug mode). A bar for whatever blocks Play, with its fix: no builds (the
+  debug mode) and **Play online** beside it. A bar for whatever blocks Play, with its fix: no builds (the
   Install the game card, or Install / rebuild), no disc (mount an image or
   pick a folder), a disc that is not BCUS98120. The first-boot note (the
   ~354 MB HDD install), a bar when Updates has news. Cards: **Quick
   settings** (window size, display mode, fps counter, keep the Mac awake),
-  **Last save**, **Status** (state, disc, the HDD install, builds, play
+  **Online (PS Rewired)** (the online ID, what Play online still needs, the
+  server's rules), **Last save**, **Status** (state, disc, the HDD install, builds, play
   folder; links to the log, Updates, **Play shortcut on the Desktop**, **Add
   to Steam**).
 - **Graphics / Gráficos**: the window: display mode (`PS3_WINDOW_MODE=
@@ -250,6 +251,23 @@ launcher (Rust, src-tauri/src/lib.rs)
   read-only.
 - Settings live in `~/Library/Application Support/resistance-recomp-2/launcher.json`,
   next to the default play folder.
+- **Play online** (`play_online`) starts the game's 01.60 update build
+  (`build/BCUS98120_v160/ResistanceRecomp` with `game/BCUS98120_v160/EBOOT.elf`,
+  from `tools/build_online.sh`; in the development tree `game_v160/EBOOT.elf`)
+  through the same window host, log and Stop as Play; the 01.00 build's
+  `Resistance` serves when the 01.60 build has no window host of its own. It
+  runs in `<play>/online/`: its own `dev_hdd0`, made the first time from a copy
+  of the campaign's HDD install (no saves) with the update's files over it
+  (`game/BCUS98120_v160/hdd0`, or `updates/hdd0_v160`), and an empty
+  `dev_hdd1`. Its environment is Play's without any frame-rate, timing,
+  scripted-input, HDD-folder or network switch (from the settings, the extra
+  variables or the launcher's own environment), plus `PS3_BOOT_PATH`,
+  `PS3_GAMEDATA_ISNEW=0`, `PS3_NET_ONLINE=1`, `PS3_NP_SIGNIN=1`,
+  `PS3_NP_ONLINE_ID`, PS Rewired's DNS and server name (`PS3_NET_DNS`,
+  `PS3_NET_HOSTS`), `PS3_NET_ALLOW` (its three addresses only),
+  `PS3_NET_LOCAL_IP` and `PS3_NET_NO_UPNP=1`. Refusals the window explains:
+  `online-id`, `online-build`, `online-update`, `online-install` (the campaign
+  has not done its HDD install yet), `game-running`, `no-disc`.
 
 ## Saves
 
