@@ -120,6 +120,14 @@ comes next. Same layout as the Resistance: Fall of Man roadmap.
   276% -> 217% CPU (cooler Mac, more room before throttling). The picture is
   unchanged. Each part has an off switch (README, Environment).
 
+- [x] Supersampling (2026-11-13, from the Resistance 1 port): an internal
+  resolution above the window's is now reduced into the window with a
+  Lanczos filter, every pixel counted, instead of the layer sampling it, so
+  it removes jaggies and shimmer; a 5K (4×) option in the launcher.
+  `PS3_DOWNSCALE=0` turns it off. Checked with the window host's own test (a
+  one-pixel checkerboard comes out an even grey); not yet seen in a window
+  here.
+
 ## Next
 
 - [ ] (in progress) Heavy combat below 30 fps: SPU-built geometry at new

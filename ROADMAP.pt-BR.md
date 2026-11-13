@@ -132,6 +132,14 @@ vem a seguir. Mesma organização do roadmap do Resistance: Fall of Man.
   antes de esquentar). A imagem não muda. Cada parte tem um desligador
   (README, Ambiente).
 
+- [x] Supersampling (13/11/2026, vindo do port do Resistance 1): uma
+  resolução interna acima da janela agora é reduzida para a janela com um
+  filtro Lanczos, contando todos os pixels, em vez de a camada amostrar, e
+  assim tira o serrilhado e a cintilação; opção 5K (4×) no launcher.
+  `PS3_DOWNSCALE=0` desliga. Conferido pelo teste do próprio host de janela
+  (um xadrez de 1 pixel sai cinza uniforme); ainda não visto numa janela
+  aqui.
+
 ## Próximos passos
 
 - [ ] (em andamento) Combate pesado abaixo de 30 fps: a geometria dos SPUs
