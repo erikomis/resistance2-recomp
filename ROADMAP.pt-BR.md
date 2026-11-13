@@ -130,7 +130,16 @@ vem a seguir. Mesma organização do roadmap do Resistance: Fall of Man.
   o jogo nos 30 fps dele: thread do RSX 450 -> 399 ms ocupada por segundo
   (-11%), processo inteiro 276% -> 217% de CPU (Mac mais frio, mais folga
   antes de esquentar). A imagem não muda. Cada parte tem um desligador
-  (README, Ambiente).
+  (README, Ambiente). Também as correções do port para PC do Resistance de
+  Psyykosis (MIT) que o port do Resistance 1 trouxe: o
+  `cellSpursReadyCountStore` sem trava (8% da thread principal em cenas
+  pesadas lá), o "acordar" do canal das SPUs sob a trava e uma espera curta
+  antes de uma SPU raw dormir, um `stwcx.` com o mesmo valor mantendo as
+  reservas das SPUs, saltos indiretos das SPUs alinhados, o registrador de
+  destino do ARL do vertex program e o teste de alfa sobre o alfa de 8 bits
+  guardado. Gameplay conferido sem janela: mesma imagem, nenhum timeout de
+  SPU. O BLIT_NEST do port do Resistance 1 não fez falta: o Resistance 2 não
+  recusa nenhuma dessas cópias.
 
 - [x] Supersampling (13/11/2026, vindo do port do Resistance 1): uma
   resolução interna acima da janela agora é reduzida para a janela com um

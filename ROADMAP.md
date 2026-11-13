@@ -119,6 +119,15 @@ comes next. Same layout as the Resistance: Fall of Man roadmap.
   the RSX thread 450 -> 399 ms busy per second (-11%), the whole process
   276% -> 217% CPU (cooler Mac, more room before throttling). The picture is
   unchanged. Each part has an off switch (README, Environment).
+  Also the fixes from Psyykosis's Resistance PC port (MIT) that the
+  Resistance 1 port took in: the lock-free `cellSpursReadyCountStore` (8% of
+  the main thread in heavy scenes there), the SPU channel wake under the
+  waiter's lock and a short spin before a raw SPU sleeps, a same-value
+  `stwcx.` keeping the SPUs' reservations, word-aligned SPU indirect
+  branches, the vertex program's ARL destination and the alpha test on the
+  stored 8-bit alpha. Gameplay checked headless: same picture, no SPU
+  timeouts. The Resistance 1 port's BLIT_NEST was not needed: Resistance 2
+  declines none of those copies.
 
 - [x] Supersampling (2026-11-13, from the Resistance 1 port): an internal
   resolution above the window's is now reduced into the window with a
