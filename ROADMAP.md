@@ -134,8 +134,11 @@ comes next. Same layout as the Resistance: Fall of Man roadmap.
   Lanczos filter, every pixel counted, instead of the layer sampling it, so
   it removes jaggies and shimmer; a 5K (4×) option in the launcher.
   `PS3_DOWNSCALE=0` turns it off. Checked with the window host's own test (a
-  one-pixel checkerboard comes out an even grey); not yet seen in a window
-  here.
+  one-pixel checkerboard comes out an even grey; a white picture stays white
+  to its edges); not yet seen in a window here. The sharpening (CAS) now
+  runs after the reduction, in the window, instead of before it where the
+  reduction averaged it away (`PS3_CAS_AFTER=0` reverts); frame
+  generation's real frame carries it too.
 
 ## Next
 

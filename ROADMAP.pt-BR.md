@@ -146,8 +146,11 @@ vem a seguir. Mesma organização do roadmap do Resistance: Fall of Man.
   filtro Lanczos, contando todos os pixels, em vez de a camada amostrar, e
   assim tira o serrilhado e a cintilação; opção 5K (4×) no launcher.
   `PS3_DOWNSCALE=0` desliga. Conferido pelo teste do próprio host de janela
-  (um xadrez de 1 pixel sai cinza uniforme); ainda não visto numa janela
-  aqui.
+  (um xadrez de 1 pixel sai cinza uniforme; uma imagem branca fica branca
+  até a borda); ainda não visto numa janela aqui. A nitidez (CAS) agora é
+  aplicada depois da redução, na janela, em vez de antes, onde a redução a
+  apagava (`PS3_CAS_AFTER=0` volta); o quadro real da geração de quadros
+  também a leva.
 
 ## Próximos passos
 
