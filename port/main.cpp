@@ -705,6 +705,10 @@ int main(int argc, char** argv)
         setenv("PS3_FRAMEGEN_VPCONST", "8", 0);
         setenv("PS3_FRAMEGEN_HUD_AFTER", "23c9cdc5b534e1c9", 0);
         setenv("PS3_FRAMEGEN_STATIC_BELOW", "0.2", 0);
+        /* The DualSense / DualShock 4 light bar in Resistance 2's orange
+         * (the launcher's "game's colour"); PS3_PAD_LIGHT=off or another
+         * RRGGBB overrides it. */
+        setenv("PS3_PAD_LIGHT", "ff5a00", 0);
 #endif
         const char* s = getenv("PS3_LWCOND_EVENTS");
 #ifdef _WIN32

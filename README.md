@@ -397,7 +397,9 @@ campaign's first start) it says what. Details and exit codes:
 | `RES_HTTP_POLL_COMPAT=0` | `cellHttpClientPollConnections` back to the toolkit's default (it now reports "unavailable" so the game's HTTP thread does not spin) |
 | `RES_LEVEL=<n>` | passes `-level <n>` to the game; not confirmed to work yet |
 | `PS3_PAD_LOG=0` | turns off the controller button log (on in `play.sh`) |
-| `PS3_PAD_ADAPTIVE=0` / `PS3_PAD_FIRE_AT=<10-90>` | turns off the DualSense adaptive triggers / where R2 reads as pressed, in percent of its travel (50) |
+| `PS3_PAD_ADAPTIVE=0` / `PS3_PAD_FIRE_AT=<10-90>` | turns off the DualSense adaptive triggers / where R2 reads as pressed, in percent of its travel (50). Steam with Steam Input on takes over the DualSense and its triggers and light bar stay off: quit Steam or turn off its PlayStation controller support (the log says so when Steam is running) |
+| `PS3_PAD_LIGHT=<RRGGBB>\|off`, `PS3_PAD_LIGHT_HIT=0` | the DualSense / DualShock 4 light bar (Resistance 2's orange, `ff5a00`, by default) / no red glow with the game's rumble |
+| `PS3_PAD_GYRO=<0-400>`, `PS3_PAD_GYRO_MODE=always`, `PS3_PAD_GYRO_INVERT_Y=1` | gyro aim in percent (off by default): turning and tilting the controller adds to the right stick while the left trigger is held, or always |
 | `PS3_FRAMEGEN=1` | MetalFX frame generation (macOS 26+; a switch in the launcher): one generated frame between every two the game renders, the HUD left out. Experimental, off by default; see below |
 | `PS3_FRAMEGEN_VPCONST`, `PS3_FRAMEGEN_HUD_AFTER`, `PS3_FRAMEGEN_STATIC_BELOW` | where frame generation finds Resistance 2's camera (vertex constants c[8..11]), the end of its 3D picture (fragment program `23c9cdc5b534e1c9`) and its first-person weapon (depth under 0.2); set by the port, override for experiments |
 | `PS3_LWCOND_EVENTS=0` | `sys_lwcond` back to sleep-and-retry polling (real notifications are the default) |

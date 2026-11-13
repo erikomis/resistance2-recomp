@@ -110,6 +110,16 @@ vem a seguir. Mesma organização do roadmap do Resistance: Fall of Man.
   gerado. Ligada também pelo host de janela (o Jogar do launcher). Ainda
   não testada numa janela por um jogador.
 
+- [x] Mais do DualSense (13/11/2026): a barra de luz no laranja do jogo (ou
+  outra cor, ou desligada) ficando vermelha com tiros e explosões, as luzes
+  de jogador e a mira por giroscópio opcional (girar e inclinar o controle
+  segurando o gatilho esquerdo, ou sempre). Os gatilhos adaptáveis não faziam
+  nada no DualSense do jogador porque o Steam (Steam Input) segurava o
+  controle e reescrevia a saída dele; com o Steam fechado eles funcionam. O
+  port agora limpa os bits de economia de energia do controle ao abri-lo e
+  avisa no log quando o Steam está aberto. Mira por giroscópio ainda não
+  testada por um jogador.
+
 ## Próximos passos
 
 - [ ] (em andamento) Combate pesado abaixo de 30 fps: a geometria dos SPUs

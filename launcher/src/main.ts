@@ -50,6 +50,10 @@ export interface Settings {
   rumble: boolean;
   rumbleStrength: number;
   adaptiveTriggers: boolean;
+  padLight: string;
+  padLightHit: boolean;
+  gyro: number;
+  gyroAlways: boolean;
   audioVolume: number;
   audioMute: boolean;
   audioDevice: string;
@@ -379,8 +383,8 @@ function bindRange(id: string, key: NumKey, fmt: (v: number) => string) {
   });
 }
 
-type NumSelectKey = "aniso" | "frameClockUs" | "shaderAsyncJobs" | "shaderSyncHit" | "drainSpikeMs";
-const NUM_SELECTS: string[] = ["aniso", "frameClockUs", "shaderAsyncJobs", "shaderSyncHit", "drainSpikeMs"];
+type NumSelectKey = "aniso" | "frameClockUs" | "shaderAsyncJobs" | "shaderSyncHit" | "drainSpikeMs" | "gyro";
+const NUM_SELECTS: string[] = ["aniso", "frameClockUs", "shaderAsyncJobs", "shaderSyncHit", "drainSpikeMs", "gyro"];
 
 function bindSelect(id: string, key: StrKey | NumSelectKey) {
   const el = $<HTMLSelectElement>(id);
@@ -519,6 +523,10 @@ function bindSettings() {
   bindCheck("mouse-capture", "mouseCapture");
   bindCheck("rumble-on", "rumble");
   bindCheck("adaptive-on", "adaptiveTriggers");
+  bindSelect("pad-light", "padLight");
+  bindCheck("pad-light-hit", "padLightHit");
+  bindSelect("gyro", "gyro");
+  bindCheck("gyro-always", "gyroAlways");
   bindCheck("audio-mute", "audioMute");
   bindSelect("window-mode", "windowMode");
   bindSelect("q-window-mode", "windowMode");
@@ -670,6 +678,10 @@ const DEFAULTS: Partial<Settings> = {
   rumble: true,
   rumbleStrength: 100,
   adaptiveTriggers: true,
+  padLight: "",
+  padLightHit: true,
+  gyro: 0,
+  gyroAlways: false,
   audioVolume: 100,
   audioMute: false,
   audioDevice: "",
