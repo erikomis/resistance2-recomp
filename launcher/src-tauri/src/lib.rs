@@ -94,6 +94,9 @@ pub struct Settings {
     pub vsync: bool,
     /// PS3_UPSCALE: "" (a plain scale) or "metalfx" (macOS 13+).
     pub upscale: String,
+    /// PS3_FRAMEGEN=1: MetalFX frame generation (macOS 26+), one generated
+    /// frame between every two the game renders. Experimental, off.
+    pub framegen: bool,
     /// PS3_RES_SCALE: the internal resolution as a multiple of 1280x720,
     /// "" (native), "1.5" (1080p), "2" (1440p) or "3" (4K). Experimental.
     pub res_scale: String,
@@ -237,6 +240,7 @@ impl Default for Settings {
             display: String::new(),
             vsync: true,
             upscale: String::new(),
+            framegen: false,
             res_scale: String::new(),
             game_icon: false,
             aa: String::new(),
@@ -1302,6 +1306,9 @@ fn launch_env(s: &Settings, disc: &Path, play: &Path, input: &InputEnv) -> Vec<(
     if s.upscale == "metalfx" {
         set("PS3_UPSCALE", "metalfx".into());
     }
+    if s.framegen {
+        set("PS3_FRAMEGEN", "1".into());
+    }
     // Input: the controls file, then the mouse and rumble settings. The
     // variables win over the file's [mouse]; when the file has one (a hand
     // edit), every mouse setting is passed so the launcher's stand.
@@ -2224,6 +2231,7 @@ const FEATURE_MARKERS: &[&str] = &[
     "PS3RECOMP_ENG_GUEST_WRITE",       // GPU depth downsample, CPU writes into GPU targets
     "PS3_TELEMETRY",                   // the [tele] line and the stall report
     "PS3_PAD_ADAPTIVE",                // DualSense adaptive triggers
+    "PS3_FRAMEGEN_VPCONST",            // MetalFX frame generation
 ];
 
 /// The markers found in `data` (a NUL-terminated C string in the binary).
@@ -4439,6 +4447,11 @@ mod tests {
         assert_eq!(e["PS3_SHADER_CACHE"], "/p/online/shadercache");
         assert_eq!(e["PS3_VSYNC"], "0");
         assert_eq!(e["PS3_AA"], "fxaa");
+        // frame generation only adds presented pictures: the game keeps 30
+        let fg = Settings { framegen: true, ..st.clone() };
+        let efg: BTreeMap<String, String> = online_env(&fg, Path::new("/d"), Path::new("/p/online"), &InputEnv::default()).into_iter().collect();
+        assert_eq!(efg["PS3_FRAMEGEN"], "1");
+        assert!(!e.contains_key("PS3_FRAMEGEN"));
         // and Play itself still gets them (offline, nothing is taken away)
         let off: BTreeMap<String, String> = launch_env(&st, Path::new("/d"), Path::new("/p"), &InputEnv::default()).into_iter().collect();
         assert_eq!(off["PS3_FRAMECLOCK_US"], "10");

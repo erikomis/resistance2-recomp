@@ -398,6 +398,8 @@ campaign's first start) it says what. Details and exit codes:
 | `RES_LEVEL=<n>` | passes `-level <n>` to the game; not confirmed to work yet |
 | `PS3_PAD_LOG=0` | turns off the controller button log (on in `play.sh`) |
 | `PS3_PAD_ADAPTIVE=0` / `PS3_PAD_FIRE_AT=<10-90>` | turns off the DualSense adaptive triggers / where R2 reads as pressed, in percent of its travel (50) |
+| `PS3_FRAMEGEN=1` | MetalFX frame generation (macOS 26+; a switch in the launcher): one generated frame between every two the game renders, the HUD left out. Experimental, off by default; see below |
+| `PS3_FRAMEGEN_VPCONST`, `PS3_FRAMEGEN_HUD_AFTER`, `PS3_FRAMEGEN_STATIC_BELOW` | where frame generation finds Resistance 2's camera (vertex constants c[8..11]), the end of its 3D picture (fragment program `23c9cdc5b534e1c9`) and its first-person weapon (depth under 0.2); set by the port, override for experiments |
 | `PS3_LWCOND_EVENTS=0` | `sys_lwcond` back to sleep-and-retry polling (real notifications are the default) |
 | `SPURS_LFQ_NOWAKE=1` | turns off the SPURS lost-wake fix (for comparison) |
 | `SPU_OVL_SIG_OFF=1` / `SPU_OVL_SIG_ONLY=<ids>` | run the job modules interpreted / only these lifted (bisection) |
@@ -441,6 +443,17 @@ python3 tools/r2_input_probe.py --label level --buttons "$B" --seconds 320
 `tools/compare_r2_logs.py` lines a probe log up against an RPCS3 log of the
 same title.
 
+Frame generation has a self-test: `PS3_FRAMEGEN=1 PS3_FRAMEGEN_TEST=<dir>`
+in a headless run rebuilds every other frame from its neighbours and dumps
+it next to the real one (`PS3_FRAMEGEN_TEST_AT=<s>`, `_EVERY`, `_MAX`,
+`_SCALES=0.5,1.5,2` for motion-scale variants), and
+`tools/framegen_score.py <dir>` scores it. Walking and turning in the first
+level: 34–41 dB against 24–28 for a 50/50 blend and 27–33 with zero motion,
+motion scale 1 best, a static camera exactly zero motion, ~2 ms GPU per
+generated frame at 720p. `PS3_FG_VPDUMP=<dir>` (with `_AT`, `_FRAMES`)
+dumps a few frames' draws with their vertex constants and programs, which
+is how the camera was found.
+
 ## Updating the toolkit patch
 
 The port was developed in a plain copy of the toolkit. To turn the toolkit
@@ -462,7 +475,7 @@ home paths, and checks the result applies to a clean `a6d76c8`.
 | --- | --- |
 | [`port/`](port/) | The port: `main.cpp` (boot, guest thread), `stubs.cpp`, `patches.cpp` (the front-end input hook switch, `cellHttpClientPollConnections`), `CMakeLists.txt` (with the `Resistance` window target), `config.toml`, `spu/` (`spu_workloads.c` and the policy module's `register.c`; the lifted code of the raw SPU modules and job modules, and the raw-SPU programs' `register.c`, are generated here and never committed) |
 | [`patches/`](patches/) | The toolkit patch over ps3recomp v0.17.0 |
-| [`tools/`](tools/) | `setup_toolkit.sh`, `rebuild.sh`, `build_online.sh`, `play.sh`, `env.sh`, `prepare_r2_job_pm.py`, `prepare_r2_rawspu.py`, `prepare_r2_rawspu_loader.py`, `regen_r2_jobmods.sh`, `extract_jobmods_elf.py`, `apply_r2_frontend_patch.py`, `r2_input_probe.py`, `compare_r2_logs.py`, `export_toolkit_patch.sh`, `r2_layout.py` |
+| [`tools/`](tools/) | `setup_toolkit.sh`, `rebuild.sh`, `build_online.sh`, `play.sh`, `env.sh`, `prepare_r2_job_pm.py`, `prepare_r2_rawspu.py`, `prepare_r2_rawspu_loader.py`, `regen_r2_jobmods.sh`, `extract_jobmods_elf.py`, `apply_r2_frontend_patch.py`, `r2_input_probe.py`, `compare_r2_logs.py`, `framegen_score.py`, `export_toolkit_patch.sh`, `r2_layout.py` |
 | [`ROADMAP.md`](ROADMAP.md) | Status and next steps |
 
 ## License

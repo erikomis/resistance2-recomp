@@ -87,6 +87,17 @@ comes next. Same layout as the Resistance: Fall of Man roadmap.
   `PS3_PAD_FIRE_AT` moves the press point; a switch in the launcher, and a
   Fire with R2 (PS5 style) button on its Controls page that swaps L1/R1 with
   L2/R2. Not yet felt on a real DualSense.
+- [x] MetalFX frame generation, from the inFAMOUS 2 port (2026-11-12,
+  `PS3_FRAMEGEN=1`, a launcher switch, off by default, macOS 26+): one
+  generated frame between every two the game renders, the HUD put back
+  untouched. The camera is the world view-projection in vertex constants
+  c[8..11] (the most common one among the frame's 3D draws, so shadow
+  cascades and the first-person weapon's own projection are left out); the
+  depth is copied where the scene is composited; the weapon (depth under
+  0.2) moves with the camera. Headless self-test while walking and turning:
+  34–41 dB against 24–28 for a 50/50 blend, motion scale 1 best, a static
+  camera exactly zero motion, ~2 ms GPU per generated frame. Not yet tried
+  in a window by a player.
 
 ## Next
 

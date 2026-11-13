@@ -97,6 +97,17 @@ vem a seguir. Mesma organização do roadmap do Resistance: Fall of Man.
   aperto; um botão no launcher, e um botão Atirar com R2 (estilo PS5) na
   página Controles que troca L1/R1 com L2/R2. Ainda não sentido num DualSense
   de verdade.
+- [x] Geração de quadros MetalFX, vinda do port do inFAMOUS 2 (12/11/2026,
+  `PS3_FRAMEGEN=1`, um botão no launcher, desligada por padrão, macOS 26+):
+  um quadro gerado entre cada dois que o jogo desenha, com o HUD recolocado
+  intacto. A câmera é a view-projection do mundo nas constantes de vértice
+  c[8..11] (a mais comum entre os desenhos 3D do quadro, o que deixa de fora
+  as cascatas de sombra e a projeção própria da arma em primeira pessoa); a
+  profundidade é copiada onde a cena é composta; a arma (profundidade abaixo
+  de 0,2) anda junto com a câmera. Autoteste sem janela andando e virando:
+  34–41 dB contra 24–28 de uma mistura 50/50, escala de movimento 1 a melhor,
+  câmera parada com movimento exatamente zero, ~2 ms de GPU por quadro
+  gerado. Ainda não testada numa janela por um jogador.
 
 ## Próximos passos
 

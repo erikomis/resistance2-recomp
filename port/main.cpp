@@ -693,6 +693,18 @@ int main(int argc, char** argv)
 #else
         setenv("PS3_AUDIO_OUT_STEREO", "1", 0);
         setenv("PS3_AUDIO_LIMITER", "1", 0);
+        /* PS3_FRAMEGEN=1 (opt-in): where Resistance 2 keeps what frame
+         * generation needs. The world view-projection is vertex constants
+         * c[8..11] in every 3D program; the scene is composited onto the
+         * display surface by fragment program 23c9cdc5b534e1c9 and the HUD
+         * follows it; the first-person weapon is drawn into depth 0..0.2 with
+         * its own projection, so it moves with the camera. Measured headless
+         * (walking and turning, N -> N+2 rebuilt and compared with the real
+         * N+1): 34-41 dB against 24-28 for a 50/50 blend, motion scale 1
+         * best, a static camera exactly zero motion. */
+        setenv("PS3_FRAMEGEN_VPCONST", "8", 0);
+        setenv("PS3_FRAMEGEN_HUD_AFTER", "23c9cdc5b534e1c9", 0);
+        setenv("PS3_FRAMEGEN_STATIC_BELOW", "0.2", 0);
 #endif
         const char* s = getenv("PS3_LWCOND_EVENTS");
 #ifdef _WIN32

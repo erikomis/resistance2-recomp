@@ -24,6 +24,7 @@ export interface Settings {
   display: string;
   vsync: boolean;
   upscale: string;
+  framegen: boolean;
   resScale: string;
   gameIcon: boolean;
   aa: string;
@@ -492,6 +493,7 @@ function bindSettings() {
   bindCheck("quiet-log", "quietLog");
   bindCheck("update-auto", "autoUpdateCheck");
   bindCheck("vsync", "vsync");
+  bindCheck("framegen", "framegen");
   bindCheck("mods-dump", "modsDump");
   bindCheck("mouse-on", "mouse");
   bindCheck("mouse-invert", "mouseInvertY");
@@ -624,6 +626,7 @@ const DEFAULTS: Partial<Settings> = {
   display: "",
   vsync: true,
   upscale: "",
+  framegen: false,
   resScale: "",
   gameIcon: false,
   aa: "",
