@@ -103,7 +103,7 @@ comes next. Same layout as the Resistance: Fall of Man roadmap.
 - [x] More of the DualSense (2026-11-13): the light bar in the game's
   orange (or another colour, or off) glowing red with hits and explosions,
   the player lights, and optional gyro aim (turn and tilt the controller
-  while holding the left trigger, or always). Adaptive triggers did nothing
+  while aiming, L1 on whatever the controls bind it to, or always). Adaptive triggers did nothing
   on the player's DualSense because Steam (Steam Input) held it and kept
   rewriting its output; with Steam closed they work. The port now clears the
   controller's power-save bits when it opens it and logs a line when Steam

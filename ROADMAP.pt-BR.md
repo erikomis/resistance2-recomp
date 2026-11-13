@@ -113,7 +113,7 @@ vem a seguir. Mesma organização do roadmap do Resistance: Fall of Man.
 - [x] Mais do DualSense (13/11/2026): a barra de luz no laranja do jogo (ou
   outra cor, ou desligada) ficando vermelha com tiros e explosões, as luzes
   de jogador e a mira por giroscópio opcional (girar e inclinar o controle
-  segurando o gatilho esquerdo, ou sempre). Os gatilhos adaptáveis não faziam
+  enquanto mira, o L1 onde os controles o colocarem, ou sempre). Os gatilhos adaptáveis não faziam
   nada no DualSense do jogador porque o Steam (Steam Input) segurava o
   controle e reescrevia a saída dele; com o Steam fechado eles funcionam. O
   port agora limpa os bits de economia de energia do controle ao abri-lo e

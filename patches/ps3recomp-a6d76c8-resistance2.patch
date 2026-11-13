@@ -3579,7 +3579,7 @@ index 4d916ac..4ef0ff8 100644
      int best = -1;
      size_t best_len = 0;
 diff --git a/libs/input/cellPad.c b/libs/input/cellPad.c
-index 7fa8cab..aa176a0 100644
+index 7fa8cab..5d54e67 100644
 --- a/libs/input/cellPad.c
 +++ b/libs/input/cellPad.c
 @@ -4,10 +4,32 @@
@@ -3871,7 +3871,7 @@ index 7fa8cab..aa176a0 100644
  }
  
  static void pad_shutdown_backend(void)
-@@ -333,79 +527,539 @@ static u8 pad_sdl_trigger_to_u8(int raw)
+@@ -333,79 +527,540 @@ static u8 pad_sdl_trigger_to_u8(int raw)
      return (u8)val;
  }
  
@@ -4115,8 +4115,9 @@ index 7fa8cab..aa176a0 100644
 + *     red with them (PS3_PAD_LIGHT_HIT=0: steady colour);
 + *   - gyro aim, PS3_PAD_GYRO=<percent> (0 off, 100 = full right-stick
 + *     deflection at about 115 degrees a second): turning and tilting the
-+ *     controller adds to the right stick, only while the left trigger is
-+ *     held (aiming) unless PS3_PAD_GYRO_MODE=always. Turning left looks
++ *     controller adds to the right stick, only while the PS3 L1 control is
++ *     held -- Resistance 2's aim, on whatever the input map binds it to (the
++ *     left trigger in the modern layout) -- unless PS3_PAD_GYRO_MODE=always. Turning left looks
 + *     left, tilting the top back looks up (PS3_PAD_GYRO_INVERT_Y=1 flips
 + *     it). A small motion is lifted past the title's stick dead zone
 + *     (PS3_PAD_GYRO_DZ, 0.10 of the travel).
@@ -4200,7 +4201,7 @@ index 7fa8cab..aa176a0 100644
 +
 +/* Gyro aim: what the controller's turn this poll adds to the right stick,
 + * in SDL axis units. */
-+static void pad_extras_gyro(int p, SDL_GameController* gc, int lt, int* rx, int* ry)
++static void pad_extras_gyro(int p, SDL_GameController* gc, int aiming, int* rx, int* ry)
 +{
 +    PadExtras* x = &s_extra[p];
 +    if (!x->gyro) return;
@@ -4208,7 +4209,7 @@ index 7fa8cab..aa176a0 100644
 +    if (always < 0) { const char* e = getenv("PS3_PAD_GYRO_MODE"); always = e && !strcmp(e, "always"); }
 +    if (inv_y < 0) { const char* e = getenv("PS3_PAD_GYRO_INVERT_Y"); inv_y = e && e[0] == '1'; }
 +    if (dz < 0.0f) { const char* e = getenv("PS3_PAD_GYRO_DZ"); dz = e ? (float)atof(e) : 0.10f; if (!(dz >= 0.0f) || dz > 0.5f) dz = 0.10f; }
-+    if (!always && lt <= PAD_TRIGGER_PRESS) return;
++    if (!always && !aiming) return;
 +    float g[3] = { 0, 0, 0 };   /* rad/s: pitch (x), yaw (y), roll (z) */
 +    if (SDL_GameControllerGetSensorData(gc, SDL_SENSOR_GYRO, g, 3) != 0) return;
 +    const float full = 2.0f / pad_gyro_sens();   /* rad/s for a full stick */
@@ -4442,7 +4443,7 @@ index 7fa8cab..aa176a0 100644
 +                                        pad_sdl_axis_to_u8(SDL_GameControllerGetAxis(gc, SDL_CONTROLLER_AXIS_LEFTY)));
 +        int rx = SDL_GameControllerGetAxis(gc, SDL_CONTROLLER_AXIS_RIGHTX);
 +        int ry = SDL_GameControllerGetAxis(gc, SDL_CONTROLLER_AXIS_RIGHTY);
-+        pad_extras_gyro(i, gc, lt, &rx, &ry);
++        pad_extras_gyro(i, gc, (btns & CELL_PAD_CTRL_L1) != 0, &rx, &ry);
 +        pad_extras_light(i, gc);
 +        s_host_state[i].analog_rx = (u8)pad_dir_axis(ctl, PIM_RS_LEFT, PIM_RS_RIGHT, pad_sdl_axis_to_u8(rx));
 +        s_host_state[i].analog_ry = (u8)pad_dir_axis(ctl, PIM_RS_UP, PIM_RS_DOWN, pad_sdl_axis_to_u8(ry));
@@ -4453,7 +4454,7 @@ index 7fa8cab..aa176a0 100644
  
          /* Pressure: SDL has digital buttons, so 0 or 255 */
          s_host_state[i].press_up       = (btns & CELL_PAD_CTRL_UP)       ? 255 : 0;
-@@ -423,32 +1077,52 @@ static void pad_poll_sdl2(void)
+@@ -423,32 +1078,52 @@ static void pad_poll_sdl2(void)
  
  static void pad_init_backend(void)
  {
@@ -4519,7 +4520,7 @@ index 7fa8cab..aa176a0 100644
      memset(s_rumble, 0, sizeof s_rumble);
  }
  
-@@ -485,6 +1159,240 @@ static unsigned long long pad_now_ms(void)
+@@ -485,6 +1160,240 @@ static unsigned long long pad_now_ms(void)
  #endif
  }
  
@@ -4760,7 +4761,7 @@ index 7fa8cab..aa176a0 100644
  static void pad_poll_backend(void)
  {
      /* Benign race: two threads may poll in the same tick. That costs one extra
-@@ -492,6 +1400,7 @@ static void pad_poll_backend(void)
+@@ -492,6 +1401,7 @@ static void pad_poll_backend(void)
      static unsigned long long s_last_ms = 0;
      unsigned long long now = pad_now_ms();
      if (s_last_ms && now - s_last_ms < PAD_POLL_INTERVAL_MS) return;
@@ -4768,7 +4769,7 @@ index 7fa8cab..aa176a0 100644
      s_last_ms = now;
      /* A real pad streams reports at roughly this rate whether or not anything
       * changed, and libpad buffers them; a fresh sweep is a fresh report for
-@@ -505,7 +1414,20 @@ static void pad_poll_backend(void)
+@@ -505,7 +1415,20 @@ static void pad_poll_backend(void)
  #endif
  #ifdef _WIN32
      if (!s_host_state[0].connected) pad_poll_keyboard();
@@ -4789,7 +4790,7 @@ index 7fa8cab..aa176a0 100644
  }
  
  /* ---------------------------------------------------------------------------
-@@ -526,15 +1448,24 @@ s32 cellPadInit(u32 max_connect)
+@@ -526,15 +1449,24 @@ s32 cellPadInit(u32 max_connect)
      if (max_connect == 0 || max_connect > 127)
          return CELL_PAD_ERROR_INVALID_PARAMETER;
  
@@ -4814,7 +4815,7 @@ index 7fa8cab..aa176a0 100644
  
      return CELL_OK;
  }
-@@ -546,7 +1477,9 @@ s32 cellPadEnd(void)
+@@ -546,7 +1478,9 @@ s32 cellPadEnd(void)
      if (!s_pad_initialized)
          return CELL_PAD_ERROR_NOT_OPENED;
  
@@ -4824,7 +4825,7 @@ index 7fa8cab..aa176a0 100644
  
      s_pad_initialized = 0;
      s_max_connect = 0;
-@@ -711,14 +1644,39 @@ skip_inject: ;
+@@ -711,14 +1645,39 @@ skip_inject: ;
             * looks like regardless of poll rate. */
            static int fired[256], held[256];
            for (int i = 0; i < n_ev; i++) {
@@ -4867,7 +4868,7 @@ index 7fa8cab..aa176a0 100644
                }
            }
        } }
-@@ -735,6 +1693,7 @@ skip_inject: ;
+@@ -735,6 +1694,7 @@ skip_inject: ;
       *   echo 0x0040 4 > pad.txt  # DOWN for 4 polls (menus auto-repeat a
       *                            # long hold; the default is 40)
       */
@@ -4875,7 +4876,7 @@ index 7fa8cab..aa176a0 100644
      { static int s_pf = -1; static char pf_path[512];
        static unsigned held_mask = 0; static int held_n = 0;
        if (s_pf < 0) { const char* e = getenv("PAD_FILE");
-@@ -746,11 +1705,25 @@ skip_inject: ;
+@@ -746,11 +1706,25 @@ skip_inject: ;
                if (f) {
                    char buf[64]; buf[0] = 0;
                    if (fgets(buf, sizeof buf, f)) {
@@ -4906,7 +4907,7 @@ index 7fa8cab..aa176a0 100644
                    }
                    fclose(f);
                    if (held_n > 0) { FILE* w = fopen(pf_path, "wb"); if (w) fclose(w); }
-@@ -782,6 +1755,12 @@ skip_inject: ;
+@@ -782,6 +1756,12 @@ skip_inject: ;
        if (s_st && pad_clock(s_t0) >= s_from && pad_clock(s_t0) < s_until) { hs->analog_lx = s_v[0]; hs->analog_ly = s_v[1];
                    hs->analog_rx = s_v[2]; hs->analog_ry = s_v[3];
                    hs->connected = 1; }
@@ -4919,7 +4920,7 @@ index 7fa8cab..aa176a0 100644
        /* PAD_SWEEP=<seconds per step>: walk the sticks through a fixed set of
         * deflections instead of holding one. Guessing a single stick position and
         * re-running costs ~5 minutes a try; a sweep answers "can input move the
-@@ -896,6 +1875,21 @@ emit:
+@@ -896,6 +1876,21 @@ emit:
      }
      {
          unsigned int ea = (unsigned int)(uintptr_t)data_guest;
@@ -4941,7 +4942,7 @@ index 7fa8cab..aa176a0 100644
          vm_write32((unsigned long long)ea + 0, (unsigned int)data->len);   /* len (s32) */
          for (int _i = 0; _i < CELL_PAD_MAX_CODES; _i++)                    /* button[] u16 */
              vm_write16((unsigned long long)ea + 4 + (unsigned int)_i * 2, data->button[_i]);
-@@ -946,7 +1940,7 @@ s32 cellPadGetInfo(CellPadInfo2* info)
+@@ -946,7 +1941,7 @@ s32 cellPadGetInfo(CellPadInfo2* info)
                    (s_host_state[i].connected || i == 0));
          vm_write16(gaddr + 0x00C + i * 2, on ? 0x054C : 0);   /* vendor: Sony  */
          vm_write16(gaddr + 0x10A + i * 2, on ? 0x0268 : 0);   /* product: DS3  */
@@ -4950,7 +4951,7 @@ index 7fa8cab..aa176a0 100644
      }
      return CELL_OK;
  }
-@@ -973,7 +1967,7 @@ s32 cellPadGetInfo2(CellPadInfo2* info_guest)
+@@ -973,7 +1968,7 @@ s32 cellPadGetInfo2(CellPadInfo2* info_guest)
           * boot flows that block until a controller is connected can proceed even
           * with no physical device attached. */
          if (s_host_state[i].connected || i == 0) {
@@ -4959,7 +4960,7 @@ index 7fa8cab..aa176a0 100644
              info->port_setting[i]      = s_port_setting[i];
              info->device_capability[i] = CELL_PAD_CAPABILITY_PS3_CONFORMITY
                                         | CELL_PAD_CAPABILITY_PRESS_MODE
-@@ -983,7 +1977,7 @@ s32 cellPadGetInfo2(CellPadInfo2* info_guest)
+@@ -983,7 +1978,7 @@ s32 cellPadGetInfo2(CellPadInfo2* info_guest)
              info->device_type[i]       = CELL_PAD_DEV_TYPE_STANDARD;
              connected++;
          } else {
@@ -4968,7 +4969,7 @@ index 7fa8cab..aa176a0 100644
          }
      }
      info->now_connect = connected;
-@@ -1028,7 +2022,7 @@ s32 cellPadPeriphGetInfo(CellPadPeriphInfo* info_guest)
+@@ -1028,7 +2023,7 @@ s32 cellPadPeriphGetInfo(CellPadPeriphInfo* info_guest)
          /* Same virtual-pad-on-port-0 rule as cellPadGetInfo2, so both views of
           * the ports agree (a game that cross-checks them must see one truth). */
          if ((i < PAD_MAX_HOST_PORTS && s_host_state[i].connected) || i == 0) {
@@ -4977,7 +4978,7 @@ index 7fa8cab..aa176a0 100644
              info->port_setting[i]      = s_port_setting[i];
              info->device_capability[i] = CELL_PAD_CAPABILITY_PS3_CONFORMITY
                                         | CELL_PAD_CAPABILITY_PRESS_MODE
-@@ -1040,7 +2034,7 @@ s32 cellPadPeriphGetInfo(CellPadPeriphInfo* info_guest)
+@@ -1040,7 +2035,7 @@ s32 cellPadPeriphGetInfo(CellPadPeriphInfo* info_guest)
              info->pclass_profile[i]    = 0;
              connected++;
          } else {
@@ -4986,7 +4987,7 @@ index 7fa8cab..aa176a0 100644
          }
      }
      info->now_connect = connected;
-@@ -1104,6 +2098,39 @@ s32 cellPadSetPressMode(u32 port_no, u32 mode)
+@@ -1104,6 +2099,39 @@ s32 cellPadSetPressMode(u32 port_no, u32 mode)
      return CELL_OK;
  }
  
@@ -5026,7 +5027,7 @@ index 7fa8cab..aa176a0 100644
  s32 cellPadGetCapabilityInfo(u32 port_no, CellPadCapabilityInfo* info)
  {
      if (!s_pad_initialized)
-@@ -1136,29 +2163,43 @@ s32 cellPadSetActDirect(u32 port_no, CellPadActParam* param)
+@@ -1136,29 +2164,43 @@ s32 cellPadSetActDirect(u32 port_no, CellPadActParam* param)
  
      param = GUEST_PTR(param, CellPadActParam*);
  
@@ -6187,10 +6188,10 @@ index 0000000..155c6af
 +void test_pad_reload_mouse(void) { s_mouse_on = -1; }
 diff --git a/libs/input/tests/test_pad_adaptive.c b/libs/input/tests/test_pad_adaptive.c
 new file mode 100644
-index 0000000..0ad9504
+index 0000000..7aaeab3
 --- /dev/null
 +++ b/libs/input/tests/test_pad_adaptive.c
-@@ -0,0 +1,210 @@
+@@ -0,0 +1,215 @@
 +/* cellPad's DualSense adaptive triggers: a DualSense gets a gun click on the
 + * right trigger (pressed only past the break) and a light resistance on the
 + * left; firing with the motors running makes the right trigger buzz, and it
@@ -6255,7 +6256,8 @@ index 0000000..0ad9504
 +    s_pad.effects++;
 +    return 0;
 +}
-+Uint8 SDL_GameControllerGetButton(SDL_GameController* gc, SDL_GameControllerButton b) { (void)gc; (void)b; return 0; }
++static int s_lb;   /* the left shoulder held (L1 by default: Resistance 2's aim) */
++Uint8 SDL_GameControllerGetButton(SDL_GameController* gc, SDL_GameControllerButton b) { (void)gc; return b == SDL_CONTROLLER_BUTTON_LEFTSHOULDER && s_lb; }
 +Sint16 SDL_GameControllerGetAxis(SDL_GameController* gc, SDL_GameControllerAxis a)
 +{
 +    (void)gc;
@@ -6359,13 +6361,17 @@ index 0000000..0ad9504
 +    poll_wait(60);
 +    assert(s_x.rgb[0] == 0x10 && s_x.rgb[1] == 0x20 && s_x.rgb[2] == 0x30);
 +
-+    /* Gyro aim: nothing while the left trigger is up; turning left with it
-+     * held pushes the right stick left (past the dead zone), tilting the top
-+     * back pushes it up. */
++    /* Gyro aim: nothing while L1 (aim) is up, even with the left trigger
++     * (L2 in the default map) held; turning left while aiming pushes the
++     * right stick left (past the dead zone), tilting the top back pushes it
++     * up. */
 +    s_x.gyro[1] = 1.0f;
 +    poll_wait(PAD_POLL_INTERVAL_MS + 2);
 +    assert(s_host_state[0].analog_rx == 127 || s_host_state[0].analog_rx == 128);
 +    s_pad.lt = 20000;
++    poll_wait(PAD_POLL_INTERVAL_MS + 2);
++    assert(s_host_state[0].analog_rx == 127 || s_host_state[0].analog_rx == 128);
++    s_pad.lt = 0; s_lb = 1;
 +    poll_wait(PAD_POLL_INTERVAL_MS + 2);
 +    assert(s_host_state[0].analog_rx < 128 - 40);
 +    s_x.gyro[1] = 0.0f; s_x.gyro[0] = 1.0f;
@@ -6374,7 +6380,7 @@ index 0000000..0ad9504
 +    s_x.gyro[0] = 0.001f;                                     /* resting jitter: nothing */
 +    poll_wait(PAD_POLL_INTERVAL_MS + 2);
 +    assert(s_host_state[0].analog_ry == 127 || s_host_state[0].analog_ry == 128);
-+    s_pad.lt = 0; s_x.gyro[0] = 0.0f;
++    s_lb = 0; s_x.gyro[0] = 0.0f;
 +
 +    /* Closing frees both triggers. */
 +    const int before_end = s_pad.effects;
