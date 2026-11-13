@@ -96,7 +96,7 @@ comes next. Same layout as the Resistance: Fall of Man roadmap.
   depth is copied where the scene is composited; the weapon (depth under
   0.2) moves with the camera. Headless self-test while walking and turning:
   34–41 dB against 24–28 for a 50/50 blend, motion scale 1 best, a static
-  camera exactly zero motion, ~2 ms GPU per generated frame. Works through
+  camera exactly zero motion, ~2 ms GPU per generated frame. Wired through
   the window host too (the launcher's Play). Not yet tried in a window by a
   player.
 

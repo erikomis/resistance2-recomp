@@ -107,7 +107,7 @@ vem a seguir. Mesma organização do roadmap do Resistance: Fall of Man.
   de 0,2) anda junto com a câmera. Autoteste sem janela andando e virando:
   34–41 dB contra 24–28 de uma mistura 50/50, escala de movimento 1 a melhor,
   câmera parada com movimento exatamente zero, ~2 ms de GPU por quadro
-  gerado. Funciona também pelo host de janela (o Jogar do launcher). Ainda
+  gerado. Ligada também pelo host de janela (o Jogar do launcher). Ainda
   não testada numa janela por um jogador.
 
 ## Próximos passos
