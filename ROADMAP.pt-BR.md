@@ -120,6 +120,18 @@ vem a seguir. Mesma organização do roadmap do Resistance: Fall of Man.
   avisa no log quando o Steam está aberto. Mira por giroscópio ainda não
   testada por um jogador.
 
+- [x] Dos outros ports de Resistance (13/11/2026): os ganhos da thread do
+  RSX do port do Resistance 3, como o port do Resistance 1 os trouxe
+  (texturas achadas por índice hash, só as constantes de vértice que mudaram
+  copiadas, filtro de endereços antes das buscas de superfície, sem a sombra
+  de estado antiga, 2048 visões de textura com descarte LRU, caminho direto
+  para palavras simples da FIFO), e o "dormir" de uma thread que só lê o
+  relógio. A/B sem janela na primeira fase, dois pares em ordem invertida,
+  o jogo nos 30 fps dele: thread do RSX 450 -> 399 ms ocupada por segundo
+  (-11%), processo inteiro 276% -> 217% de CPU (Mac mais frio, mais folga
+  antes de esquentar). A imagem não muda. Cada parte tem um desligador
+  (README, Ambiente).
+
 ## Próximos passos
 
 - [ ] (em andamento) Combate pesado abaixo de 30 fps: a geometria dos SPUs

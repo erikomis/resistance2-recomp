@@ -109,6 +109,17 @@ comes next. Same layout as the Resistance: Fall of Man roadmap.
   controller's power-save bits when it opens it and logs a line when Steam
   is running. Gyro aim not yet tried by a player.
 
+- [x] From the other Resistance ports (2026-11-13): the Resistance 3 port's
+  RSX-thread work, as the Resistance 1 port took it in (texture lookups
+  through a hash index, only changed vertex constants copied, an address
+  filter before the surface scans, no legacy state shadow, 2048 texture
+  views with LRU eviction, a direct path for plain FIFO words), and its
+  timebase-poll sleep for a thread that only reads the clock. Headless A/B
+  in the first level, two pairs in opposite order, the game at its 30 fps:
+  the RSX thread 450 -> 399 ms busy per second (-11%), the whole process
+  276% -> 217% CPU (cooler Mac, more room before throttling). The picture is
+  unchanged. Each part has an off switch (README, Environment).
+
 ## Next
 
 - [ ] (in progress) Heavy combat below 30 fps: SPU-built geometry at new
