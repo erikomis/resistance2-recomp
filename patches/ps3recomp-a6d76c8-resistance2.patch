@@ -16885,7 +16885,7 @@ index baba40f..f10654e 100644
  
  /* Present one frame: clear the drawable to the colour last received through the
 diff --git a/libs/video/rsx_metal_backend.m b/libs/video/rsx_metal_backend.m
-index 5b20d8a..895207d 100644
+index 5b20d8a..3f3b9df 100644
 --- a/libs/video/rsx_metal_backend.m
 +++ b/libs/video/rsx_metal_backend.m
 @@ -56,6 +56,22 @@
@@ -20081,11 +20081,12 @@ index 5b20d8a..895207d 100644
          const int windowed_present = (present_dst && !s_headless);
          { const uint64_t w0 = PS3_FT_ON() ? ps3_ft_now() : 0;
            if (windowed_present) dispatch_semaphore_wait(s_inflight, DISPATCH_TIME_FOREVER);
-@@ -3608,7 +5975,15 @@ static void eng_encode_and_commit(id<MTLTexture> present_dst)
+@@ -3608,7 +5975,16 @@ static void eng_encode_and_commit(id<MTLTexture> present_dst)
          if (present_dst) {
              if (s_headless) {
                  dst = s_offscreen;
 +            } else if (s_host) {
++                fg_pacer_flush();   /* PS3_FRAMEGEN: the previous frame's real picture goes first */
 +                host_slot = host_acquire();
 +                if (host_slot < 0) {       /* every surface busy; skip */
 +                    dispatch_semaphore_signal(s_inflight);
@@ -20097,7 +20098,7 @@ index 5b20d8a..895207d 100644
                  drawable = [s_layer nextDrawable];
                  if (!drawable) {           /* compositor is busy; skip */
                      dispatch_semaphore_signal(s_inflight);
-@@ -3619,32 +5994,60 @@ static void eng_encode_and_commit(id<MTLTexture> present_dst)
+@@ -3619,32 +5995,60 @@ static void eng_encode_and_commit(id<MTLTexture> present_dst)
          }
  
          id<MTLBuffer> stage = nil;
@@ -20124,8 +20125,8 @@ index 5b20d8a..895207d 100644
 +         * the frame) and the offscreen target gets the frame, as always. */
 +        id<MTLTexture> fg_real = nil;
 +        if (present_dst && dst) {
-+            id<MTLTexture> fg_pic = (fgj && host_slot < 0) ? fg_encode(cb, fgj, present_dst) : nil;
-+            if (fg_pic && drawable && (fg_real = fg_real_target(dst)) != nil) {
++            id<MTLTexture> fg_pic = fgj ? fg_encode(cb, fgj, present_dst) : nil;
++            if (fg_pic && (drawable || host_slot >= 0) && (fg_real = fg_real_target(dst)) != nil) {
 +                eng_blit_to_display(cb, fg_pic, dst);
 +                eng_blit_to_display(cb, present_dst, fg_real);
 +            } else {
@@ -20164,7 +20165,7 @@ index 5b20d8a..895207d 100644
              if (ft_w0) {
                  const uint64_t w1 = ps3_ft_now();
                  ps3_ft_span(PS3_FT_GPU_WAIT, 0, present_dst ? 1u : 0u,
-@@ -3654,6 +6057,7 @@ static void eng_encode_and_commit(id<MTLTexture> present_dst)
+@@ -3654,6 +6058,7 @@ static void eng_encode_and_commit(id<MTLTexture> present_dst)
                      ps3_ft_span(PS3_FT_GPU_EXEC, s_ft_passes, s_ft_resolves | (s_ft_copies << 16),
                                  present_dst ? 1u : 0u, w1 - (uint64_t)(gpu_s * 1e9), w1);
              }
@@ -20172,7 +20173,7 @@ index 5b20d8a..895207d 100644
              s_eng_checked_completed = [cb status] == MTLCommandBufferStatusCompleted &&
                                        ![cb error] && !s_eng_dropped && !s_eng_encoding_failed;
              if (!s_eng_checked_completed) s_eng_encoding_failed = 1;
-@@ -3670,11 +6074,12 @@ static void eng_encode_and_commit(id<MTLTexture> present_dst)
+@@ -3670,11 +6075,12 @@ static void eng_encode_and_commit(id<MTLTexture> present_dst)
  
          if (s_eng_dropped) {
              fprintf(stderr, "[rsx engine/metal] dropped %u record(s) (cap %d)\n",
@@ -20186,7 +20187,7 @@ index 5b20d8a..895207d 100644
          eng_collect_retired_objects();
      }
  }
-@@ -3683,7 +6088,8 @@ static void eng_encode_and_commit(id<MTLTexture> present_dst)
+@@ -3683,7 +6089,8 @@ static void eng_encode_and_commit(id<MTLTexture> present_dst)
   * Headless submits have completed; windowed captures fence the same queue. */
  static void eng_dump_frame(id<MTLTexture> src)
  {
@@ -20196,7 +20197,7 @@ index 5b20d8a..895207d 100644
      if (!path || !*path) return;
      static unsigned frame;
      if ((++frame % 120) != 0) return;
-@@ -3715,13 +6121,101 @@ static void eng_dump_frame(id<MTLTexture> src)
+@@ -3715,13 +6122,101 @@ static void eng_dump_frame(id<MTLTexture> src)
      free(rgba);
  }
  
@@ -20298,7 +20299,7 @@ index 5b20d8a..895207d 100644
  }
  
  static void eng_readback(void* user, u32 surface, u32 x, u32 y, u32 w, u32 h,
-@@ -3730,8 +6224,22 @@ static void eng_readback(void* user, u32 surface, u32 x, u32 y, u32 w, u32 h,
+@@ -3730,8 +6225,22 @@ static void eng_readback(void* user, u32 surface, u32 x, u32 y, u32 w, u32 h,
      (void)user;
      id<MTLTexture> t = eng_obj(surface);
      if (!t || !out || !out_pitch || !w || !h) return;
@@ -20322,7 +20323,7 @@ index 5b20d8a..895207d 100644
      [t getBytes:out bytesPerRow:out_pitch
       fromRegion:MTLRegionMake2D(x, y, w, h) mipmapLevel:0];
      if (ft_t0) ps3_ft_span(PS3_FT_READBACK, 0, w, h, ft_t0, ps3_ft_now());
-@@ -3741,8 +6249,29 @@ static void eng_readback(void* user, u32 surface, u32 x, u32 y, u32 w, u32 h,
+@@ -3741,8 +6250,29 @@ static void eng_readback(void* user, u32 surface, u32 x, u32 y, u32 w, u32 h,
   * requested rectangle to CPU-coherent shared storage. Resolving only the ROI
   * would rescale the source and change its coordinates. Never expose bytes
   * until both the resolve and the copy have completed successfully. */
@@ -20352,7 +20353,7 @@ index 5b20d8a..895207d 100644
  {
      id<MTLTexture> src = eng_obj(depth);
      if (!s_dev || !s_queue || !src || !out || !w || !h ||
-@@ -3763,8 +6292,8 @@ static int eng_depth_readback(void* user, u32 depth, u32 x, u32 y, u32 w, u32 h,
+@@ -3763,8 +6293,8 @@ static int eng_depth_readback(void* user, u32 depth, u32 x, u32 y, u32 w, u32 h,
          id<MTLBuffer> staging = [s_dev newBufferWithLength:copy_pitch * h
                                                   options:MTLResourceStorageModeShared];
          if (!staging || ![staging contents]) return -1;
@@ -20363,7 +20364,7 @@ index 5b20d8a..895207d 100644
          if (!snap) return -1;
          eng_encode_and_commit(nil);
          if (!s_eng_checked_completed) { eng_obj_release(user, snap); return -1; }
-@@ -3792,8 +6321,93 @@ static int eng_depth_readback(void* user, u32 depth, u32 x, u32 y, u32 w, u32 h,
+@@ -3792,8 +6322,93 @@ static int eng_depth_readback(void* user, u32 depth, u32 x, u32 y, u32 w, u32 h,
      }
  }
  
@@ -20457,7 +20458,7 @@ index 5b20d8a..895207d 100644
      .init                 = eng_init,
      .shutdown             = eng_shutdown,
      .submit_and_wait      = eng_submit_and_wait,
-@@ -3804,12 +6418,16 @@ static int eng_depth_readback(void* user, u32 depth, u32 x, u32 y, u32 w, u32 h,
+@@ -3804,12 +6419,16 @@ static int eng_depth_readback(void* user, u32 depth, u32 x, u32 y, u32 w, u32 h,
      .texture_upload_3d    = eng_texture_upload_3d,
      .color_target_create  = eng_color_target_create,
      .color_target_release = eng_obj_release,
@@ -20474,7 +20475,7 @@ index 5b20d8a..895207d 100644
      .pipeline_create      = eng_pipeline_create,
      .pipeline_release     = eng_pipeline_release,
      .bind_targets         = eng_bind_targets,
-@@ -3821,11 +6439,23 @@ static int eng_depth_readback(void* user, u32 depth, u32 x, u32 y, u32 w, u32 h,
+@@ -3821,11 +6440,23 @@ static int eng_depth_readback(void* user, u32 depth, u32 x, u32 y, u32 w, u32 h,
      .set_viewport         = eng_set_viewport,
      .set_scissor          = eng_set_scissor,
      .set_stencil_ref      = eng_set_stencil_ref,
@@ -20498,7 +20499,7 @@ index 5b20d8a..895207d 100644
  };
  
  /* ---- public API ---------------------------------------------------------- */
-@@ -3835,6 +6465,7 @@ int rsx_metal_backend_init(u32 width, u32 height, const char* title)
+@@ -3835,6 +6466,7 @@ int rsx_metal_backend_init(u32 width, u32 height, const char* title)
      @autoreleasepool {
          if (width)  s_width  = width;
          if (height) s_height = height;
@@ -20506,7 +20507,7 @@ index 5b20d8a..895207d 100644
  
          const char* hl = getenv("PS3RECOMP_METAL_HEADLESS");
          s_headless = (hl && *hl && *hl != '0');
-@@ -3855,7 +6486,19 @@ int rsx_metal_backend_init(u32 width, u32 height, const char* title)
+@@ -3855,7 +6487,19 @@ int rsx_metal_backend_init(u32 width, u32 height, const char* title)
          s_headless = 1;
          rc = create_offscreen();
  #else
@@ -20527,7 +20528,7 @@ index 5b20d8a..895207d 100644
  #endif
          if (rc != 0) {
              fprintf(stderr, "[RSX metal] surface creation failed\n");
-@@ -3906,14 +6549,29 @@ int rsx_metal_backend_init(u32 width, u32 height, const char* title)
+@@ -3906,14 +6550,29 @@ int rsx_metal_backend_init(u32 width, u32 height, const char* title)
           * passes both ways. PS3RECOMP_RSX_ENGINE=vtable is the way back, and
           * it stays that way until the vtable path has nothing left to say. */
          rsx_draw_engine_set_default(1);
@@ -20558,7 +20559,7 @@ index 5b20d8a..895207d 100644
                  [[s_dev name] UTF8String], s_width, s_height,
                  s_guest_shaders ? "on" : (rsx_hlsl_to_msl_available() ? "off (env)" : "off (translator not built)"),
                  s_eng_active ? "register-file draw engine" : "vtable");
-@@ -3939,6 +6597,7 @@ void rsx_metal_backend_shutdown(void)
+@@ -3939,6 +6598,7 @@ void rsx_metal_backend_shutdown(void)
                  dispatch_semaphore_signal(s_inflight);
              s_inflight = nil;
          }
@@ -20566,7 +20567,7 @@ index 5b20d8a..895207d 100644
  #if !TARGET_OS_IPHONE
          /* Only touch the main queue when there is AppKit state to tear down:
           * headless runs never pump it, and a dispatch_sync there would hang. */
-@@ -3972,10 +6631,19 @@ void rsx_metal_backend_shutdown(void)
+@@ -3972,10 +6632,19 @@ void rsx_metal_backend_shutdown(void)
      }
  }
  
@@ -20586,7 +20587,7 @@ index 5b20d8a..895207d 100644
      @autoreleasepool {
          for (;;) {
              NSEvent* ev = [NSApp nextEventMatchingMask:NSEventMaskAny
-@@ -3983,8 +6651,15 @@ static int pump_messages_impl(void)
+@@ -3983,8 +6652,15 @@ static int pump_messages_impl(void)
                                                  inMode:NSDefaultRunLoopMode
                                                 dequeue:YES];
              if (!ev) break;
@@ -20602,7 +20603,7 @@ index 5b20d8a..895207d 100644
      }
  #endif
      return atomic_load(&s_closed) ? -1 : 0;
-@@ -4018,14 +6693,26 @@ void rsx_metal_backend_present(void)
+@@ -4018,14 +6694,26 @@ void rsx_metal_backend_present(void)
          if (ft_t0) ps3_ft_span(PS3_FT_PRESENT, 0, 0, 0, ft_t0, ps3_ft_now());
          return;
      }
@@ -20629,7 +20630,7 @@ index 5b20d8a..895207d 100644
          } else {
              drawable = [s_layer nextDrawable];
              if (!drawable) {            /* compositor is busy; skip this frame */
-@@ -4104,8 +6791,10 @@ void rsx_metal_backend_present(void)
+@@ -4104,8 +6792,10 @@ void rsx_metal_backend_present(void)
              [cb waitUntilCompleted];
          } else {
              dispatch_semaphore_t sem = s_inflight;
@@ -20644,10 +20645,10 @@ index 5b20d8a..895207d 100644
              [cb commit];        /* no wait: the CPU goes on to the next frame */
 diff --git a/libs/video/rsx_metal_framegen.h b/libs/video/rsx_metal_framegen.h
 new file mode 100644
-index 0000000..b7fb667
+index 0000000..d974748
 --- /dev/null
 +++ b/libs/video/rsx_metal_framegen.h
-@@ -0,0 +1,751 @@
+@@ -0,0 +1,767 @@
 +/*
 + * PS3_FRAMEGEN=1 -- MetalFX frame interpolation for the draw engine's Metal
 + * backend (included by rsx_metal_backend.m; everything here is file-local).
@@ -20692,7 +20693,9 @@ index 0000000..b7fb667
 + * frame's own command buffer; the frame itself goes through the present chain
 + * a second time into a private texture of the drawable's size, and a pacer
 + * thread copies that to its own drawable half the last measured frame
-+ * interval later (at most 50 ms). A frame that arrives before the previous
++ * interval later (at most 50 ms). Under the window host (s_host, how the
++ * launcher plays) the same, with host surfaces for drawables: the pacer
++ * takes a free one and publishes it when its copy completes. A frame that arrives before the previous
 + * one's real picture went out makes it go out at once. Headless there is no
 + * pacing: the interpolation is encoded (its cost is in the frame) and the
 + * real frame is what the offscreen target holds.
@@ -21163,9 +21166,16 @@ index 0000000..b7fb667
 +        if (s_fgp.flush) s_fgp.flushed++;
 +        pthread_mutex_unlock(&s_fgp.mu);
 +        @autoreleasepool {
-+            CAMetalLayer* layer = s_headless ? nil : s_layer;
++            CAMetalLayer* layer = (s_headless || s_host) ? nil : s_layer;
 +            id<CAMetalDrawable> drawable = (layer && tex && s_fg.copy_pso) ? [layer nextDrawable] : nil;
 +            id<MTLTexture> dst = [drawable texture];
++            int host_slot = -1;
++            const u32 host_gen = s_host_gen;
++            if (s_host && tex && s_fg.copy_pso && (host_slot = host_acquire()) >= 0) {
++                dst = s_host_tex[host_slot];
++                if (!dst || [dst width] != [tex width] || [dst height] != [tex height]) {
++                    host_frame_done(host_slot, host_gen, 0); host_slot = -1; dst = nil; }
++            }
 +            if (tex && s_fg.copy_pso && dst && [dst pixelFormat] == s_fg.copy_fmt) {
 +                id<MTLCommandBuffer> cb = [s_queue commandBuffer];
 +                id<MTLRenderCommandEncoder> e = fg_pass(cb, dst);
@@ -21176,10 +21186,17 @@ index 0000000..b7fb667
 +                    [e drawPrimitives:MTLPrimitiveTypeTriangle vertexStart:0 vertexCount:3];
 +                    [e endEncoding];
 +                }
-+                fps_track_drawable(drawable);
-+                [cb presentDrawable:drawable];
++                if (drawable) { fps_track_drawable(drawable); [cb presentDrawable:drawable]; }
++                if (host_slot >= 0) {
++                    const int hs = host_slot;
++                    [cb addCompletedHandler:^(id<MTLCommandBuffer> done) {
++                        host_frame_done(hs, host_gen, [done status] == MTLCommandBufferStatusCompleted);
++                    }];
++                    host_slot = -1;
++                }
 +                [cb commit];
 +            }
++            if (host_slot >= 0) host_frame_done(host_slot, host_gen, 0);   /* not used: hand it back */
 +        }
 +        pthread_mutex_lock(&s_fgp.mu);
 +        s_fgp.shown++;
