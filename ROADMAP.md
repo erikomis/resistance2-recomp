@@ -138,7 +138,12 @@ comes next. Same layout as the Resistance: Fall of Man roadmap.
   to its edges); not yet seen in a window here. The sharpening (CAS) now
   runs after the reduction, in the window, instead of before it where the
   reduction averaged it away (`PS3_CAS_AFTER=0` reverts); frame
-  generation's real frame carries it too.
+  generation's real frame carries it too. From the Resistance 1 port's
+  audit of the window's present path: a frame whose reduction or MetalFX
+  fails is drawn with a filtered copy instead of dropped, GPU failures are
+  counted and turn the failing path off, the reduction writes straight into
+  the drawable when there is no sharpening (one copy less), a screenshot of
+  what is shown (Cmd+Shift+S), and an experimental linear-light reduction.
 
 ## Next
 

@@ -150,7 +150,12 @@ vem a seguir. Mesma organização do roadmap do Resistance: Fall of Man.
   até a borda); ainda não visto numa janela aqui. A nitidez (CAS) agora é
   aplicada depois da redução, na janela, em vez de antes, onde a redução a
   apagava (`PS3_CAS_AFTER=0` volta); o quadro real da geração de quadros
-  também a leva.
+  também a leva. Da revisão do caminho de apresentação da janela feita no
+  port do Resistance 1: um quadro cuja redução ou MetalFX falha é desenhado
+  com uma cópia filtrada em vez de descartado, falhas da GPU são contadas e
+  desligam o caminho que falha, a redução escreve direto na tela quando não
+  há nitidez (uma cópia a menos), uma captura do que está na tela
+  (Cmd+Shift+S) e uma redução em luz linear experimental.
 
 ## Próximos passos
 
