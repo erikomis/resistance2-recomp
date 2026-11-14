@@ -107,7 +107,10 @@ comes next. Same layout as the Resistance: Fall of Man roadmap.
   on the player's DualSense because Steam (Steam Input) held it and kept
   rewriting its output; with Steam closed they work. The port now clears the
   controller's power-save bits when it opens it and logs a line when Steam
-  is running. Gyro aim not yet tried by a player.
+  is running. Gyro aim not yet tried by a player. From the Resistance 1
+  port (2026-11-14): the mute button turns the game's sound off and on (its
+  light shows it), a touchpad click is SELECT (the Create button), and a low
+  battery is said in the log; the README has a section on the DualSense.
 
 - [x] From the other Resistance ports (2026-11-13): the Resistance 3 port's
   RSX-thread work, as the Resistance 1 port took it in (texture lookups

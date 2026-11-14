@@ -118,7 +118,10 @@ vem a seguir. Mesma organização do roadmap do Resistance: Fall of Man.
   controle e reescrevia a saída dele; com o Steam fechado eles funcionam. O
   port agora limpa os bits de economia de energia do controle ao abri-lo e
   avisa no log quando o Steam está aberto. Mira por giroscópio ainda não
-  testada por um jogador.
+  testada por um jogador. Do port do Resistance 1 (14/11/2026): o botão de
+  mudo liga e desliga o som do jogo (a luz dele mostra), um clique no
+  touchpad é o SELECT (o botão Create) e a bateria fraca é avisada no log;
+  o README tem uma seção sobre o DualSense.
 
 - [x] Dos outros ports de Resistance (13/11/2026): os ganhos da thread do
   RSX do port do Resistance 3, como o port do Resistance 1 os trouxe

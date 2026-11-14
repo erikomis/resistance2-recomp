@@ -354,6 +354,44 @@ quadros. Feche a janela, ou aperte Ctrl+C no terminal, para sair. O
 primeiro boot copia ~354 MB de dados do jogo para a pasta de HDD, como no
 PS3.
 
+### Jogando com o controle de PS5 (DualSense)
+
+Ligue o DualSense com um cabo USB-C, ou pareie por Bluetooth (Ajustes do
+Sistema > Bluetooth; segure PS e Create até a barra de luz piscar). O jogo o
+reconhece a qualquer momento, até no meio de uma fase, e um controle
+Bluetooth que cai e volta pega o mesmo lugar de jogador de novo.
+
+> [!WARNING]
+> **Feche o Steam enquanto joga.** Com o Steam Input ligado, o Steam toma
+> conta do DualSense e reescreve o que o jogo manda para ele: os gatilhos
+> adaptáveis e a barra de luz não fazem nada (a vibração continua). Feche o
+> Steam ou desligue o suporte a controles PlayStation em Steam > Configurações
+> > Controle. O log do jogo avisa quando o Steam está aberto.
+
+**Os botões** são os do controle do PS3, nos mesmos lugares: Create é o
+SELECT, Options é o START (pausa). O botão **layout moderno** da página
+Controles passa o tiro para o R2 e a mira para o L2, como nos jogos de tiro
+recentes ("Atirar com R2" troca só os ombros e os gatilhos), e Restaurar
+padrões volta ao original. Todo botão pode ser trocado na página Controles.
+
+O que o DualSense acrescenta (Controles > Vibração, salvo indicação):
+
+| | |
+| --- | --- |
+| **Gatilhos adaptáveis** | O R2 tem o clique de um gatilho de arma: atira no clique, mais ou menos na metade (`PS3_PAD_FIRE_AT` muda o ponto), e vibra enquanto você atira; o L2 tem uma resistência leve. |
+| **Vibração** | Intensidade de 0 a 200% (acima de 100% reforça as vibrações fracas). |
+| **Barra de luz** | O laranja do Resistance 2 por padrão, ou vermelha, azul, branca, roxa, desligada; fica vermelha quando você leva tiros e com explosões (dá para desligar). |
+| **Luzes de jogador** | Mostram qual jogador o controle é. |
+| **Mira por giroscópio** | Desligada, Baixa, Média ou Alta. Gire e incline o controle para ajustar a mira enquanto mira (L1, ou L2 no layout moderno); "Sempre ligada" usa o tempo todo. O analógico direito continua funcionando. |
+| **Botão de mudo** | Liga e desliga o som do jogo; a luz do próprio botão mostra que está mudo (`PS3_PAD_MUTE_BUTTON=0` desliga isso). |
+| **Clique no touchpad** | Funciona como SELECT, igual ao botão Create (`PS3_PAD_TOUCHPAD_SELECT=0` desliga isso). |
+| **Bateria** | Quando a bateria fica fraca, e de novo quando está quase vazia, o log do jogo avisa (`PS3_PAD_BATTERY=0` desliga isso). |
+| **Som pelo controle** | Com o cabo USB o DualSense é uma saída de som: escolha "DualSense Wireless Controller" em Jogo > Saída de áudio para ouvir o jogo no alto-falante dele ou no fone ligado nele. |
+
+O botão de mudo e o touchpad fazem isso só enquanto você não der outra função
+a eles na página Controles. Um DualShock 4 tem a vibração, a barra de luz e a
+mira por giroscópio; um controle de Xbox tem a vibração.
+
 ### Jogando online
 
 O online passa pelo PS Rewired, um servidor da comunidade que mantém o
@@ -416,6 +454,7 @@ vez da campanha) ele diz o quê. Detalhes e códigos de saída:
 | `PS3_PAD_LOG=0` | desliga o log de botões do controle (ligado no `play.sh`) |
 | `PS3_PAD_ADAPTIVE=0` / `PS3_PAD_FIRE_AT=<10-90>` | desliga os gatilhos adaptáveis do DualSense / onde o R2 conta como apertado, em porcentagem do curso (50). O Steam com o Steam Input ligado toma conta do DualSense e os gatilhos e a luz ficam desligados: feche o Steam ou desligue o suporte a controles PlayStation nele (o log avisa quando o Steam está aberto) |
 | `PS3_PAD_LIGHT=<RRGGBB>\|off`, `PS3_PAD_LIGHT_HIT=0` | a barra de luz do DualSense / DualShock 4 (o laranja do Resistance 2, `ff5a00`, por padrão) / sem o brilho vermelho com a vibração do jogo |
+| `PS3_PAD_MUTE_BUTTON=0`, `PS3_PAD_TOUCHPAD_SELECT=0`, `PS3_PAD_BATTERY=0` | desligam o botão de mudo, o clique no touchpad (SELECT) e o aviso de bateria fraca do DualSense (veja Jogando com o controle de PS5) |
 | `PS3_PAD_GYRO=<0-400>`, `PS3_PAD_GYRO_MODE=always`, `PS3_PAD_GYRO_INVERT_Y=1` | mira por giroscópio em porcentagem (desligada por padrão): girar e inclinar o controle soma ao analógico direito enquanto mira (L1, onde os controles o colocarem), ou sempre |
 | `PS3_FRAMEGEN=1` | geração de quadros MetalFX (macOS 26+; um botão no launcher): um quadro gerado entre cada dois que o jogo desenha, sem mexer no HUD. Experimental, desligada por padrão; veja abaixo |
 | `PS3_FRAMEGEN_VPCONST`, `PS3_FRAMEGEN_HUD_AFTER`, `PS3_FRAMEGEN_STATIC_BELOW` | onde a geração de quadros acha a câmera do Resistance 2 (constantes de vértice c[8..11]), o fim da imagem 3D (fragment program `23c9cdc5b534e1c9`) e a arma em primeira pessoa (profundidade abaixo de 0,2); o port já define, mude só para testes |

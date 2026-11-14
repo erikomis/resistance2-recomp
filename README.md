@@ -338,6 +338,44 @@ with the seconds since launch. The window title shows the frame rate. Close
 the window, or press Ctrl+C in the terminal, to quit. The first boot copies
 ~354 MB of game data to the HDD folder, as the PS3 does.
 
+### Playing with a PS5 controller (DualSense)
+
+Plug the DualSense in with a USB-C cable, or pair it over Bluetooth (System
+Settings > Bluetooth; hold PS and Create until the light bar blinks). The game
+picks it up at any time, even in the middle of a level, and a Bluetooth
+controller that drops off and comes back takes the same player slot again.
+
+> [!WARNING]
+> **Quit Steam while you play.** With Steam Input on, Steam takes over the
+> DualSense and rewrites what the game sends it: the adaptive triggers and the
+> light bar do nothing (vibration still works). Quit Steam, or turn off
+> PlayStation controller support in Steam > Settings > Controller. The game's
+> log says so when Steam is running.
+
+**The buttons** are the PS3 pad's, in the same places: Create is SELECT,
+Options is START (pause). The **modern layout** button on the Controls page
+moves firing to R2 and aiming to L2, like recent shooters ("Fire with R2"
+swaps only the shoulders and triggers), and Restore defaults brings the
+original back. Every button can be remapped on the Controls page.
+
+What the DualSense adds (Controls > Vibration, unless said otherwise):
+
+| | |
+| --- | --- |
+| **Adaptive triggers** | R2 has a gun's trigger click: it fires at the click, about half way (`PS3_PAD_FIRE_AT` moves it), and buzzes while you shoot; L2 has a light resistance. |
+| **Vibration** | Strength from 0 to 200% (above 100% strengthens the weak rumbles). |
+| **Light bar** | Resistance 2's orange by default, or red, blue, white, purple, off; it glows red when you take hits and with explosions (can be switched off). |
+| **Player lights** | Show which player the controller is. |
+| **Gyro aim** | Off, Low, Medium or High. Turn and tilt the controller to fine-tune your aim while you aim (L1, or L2 in the modern layout); "Always on" uses it all the time. The right stick keeps working. |
+| **Mute button** | Turns the game's sound off and on; the button's own light shows it is muted (`PS3_PAD_MUTE_BUTTON=0` turns this off). |
+| **Touchpad click** | Works as SELECT, like the Create button (`PS3_PAD_TOUCHPAD_SELECT=0` turns this off). |
+| **Battery** | When the battery gets low, and again when it is almost empty, the game's log says so (`PS3_PAD_BATTERY=0` turns this off). |
+| **Sound through the controller** | With the USB cable the DualSense is a sound output: pick "DualSense Wireless Controller" under Game > Audio output to hear the game on its speaker or the headphones plugged into it. |
+
+The mute button and the touchpad do the above only while you have not given
+them another job on the Controls page. A DualShock 4 gets the vibration, the
+light bar and gyro aim; an Xbox controller gets the vibration.
+
 ### Playing online
 
 Online play goes through PS Rewired, a community server that keeps
@@ -399,6 +437,7 @@ campaign's first start) it says what. Details and exit codes:
 | `PS3_PAD_LOG=0` | turns off the controller button log (on in `play.sh`) |
 | `PS3_PAD_ADAPTIVE=0` / `PS3_PAD_FIRE_AT=<10-90>` | turns off the DualSense adaptive triggers / where R2 reads as pressed, in percent of its travel (50). Steam with Steam Input on takes over the DualSense and its triggers and light bar stay off: quit Steam or turn off its PlayStation controller support (the log says so when Steam is running) |
 | `PS3_PAD_LIGHT=<RRGGBB>\|off`, `PS3_PAD_LIGHT_HIT=0` | the DualSense / DualShock 4 light bar (Resistance 2's orange, `ff5a00`, by default) / no red glow with the game's rumble |
+| `PS3_PAD_MUTE_BUTTON=0`, `PS3_PAD_TOUCHPAD_SELECT=0`, `PS3_PAD_BATTERY=0` | the DualSense's mute button, touchpad click (SELECT) and low-battery line off (see Playing with a PS5 controller) |
 | `PS3_PAD_GYRO=<0-400>`, `PS3_PAD_GYRO_MODE=always`, `PS3_PAD_GYRO_INVERT_Y=1` | gyro aim in percent (off by default): turning and tilting the controller adds to the right stick while aiming (L1, on whatever the controls bind it to), or always |
 | `PS3_FRAMEGEN=1` | MetalFX frame generation (macOS 26+; a switch in the launcher): one generated frame between every two the game renders, the HUD left out. Experimental, off by default; see below |
 | `PS3_FRAMEGEN_VPCONST`, `PS3_FRAMEGEN_HUD_AFTER`, `PS3_FRAMEGEN_STATIC_BELOW` | where frame generation finds Resistance 2's camera (vertex constants c[8..11]), the end of its 3D picture (fragment program `23c9cdc5b534e1c9`) and its first-person weapon (depth under 0.2); set by the port, override for experiments |
