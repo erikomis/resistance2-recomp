@@ -73,6 +73,7 @@ export interface Settings {
   shaderAsyncJobs: number;
   shaderSyncHit: number;
   frameClockUs: number;
+  fps60: boolean;
   padLog: boolean;
   telemetry: boolean;
   drainSpikeMs: number;
@@ -540,6 +541,7 @@ function bindSettings() {
   bindSelect("aa", "aa");
   bindSelect("aniso", "aniso");
   bindSelect("frame-clock", "frameClockUs");
+  bindCheck("fps60", "fps60");
   bindSelect("shader-jobs", "shaderAsyncJobs");
   bindSelect("shader-sync-hit", "shaderSyncHit");
   bindSelect("drain-spike", "drainSpikeMs");
@@ -701,6 +703,7 @@ const DEFAULTS: Partial<Settings> = {
   shaderAsyncJobs: 4,
   shaderSyncHit: 2,
   frameClockUs: 50,
+  fps60: false,
   padLog: true,
   telemetry: true,
   drainSpikeMs: 100,

@@ -78,6 +78,17 @@ if(NOT R2_FRONTEND_PATCH_RESULT EQUAL 0)
     message(FATAL_ERROR "Could not apply the Resistance 2 frontend input hook")
 endif()
 
+# RES_UNLOCK_FPS: the code half of the community's "Unlock FPS" patch (the
+# campaign's frame limiter) behind a run-time switch; 01.00 only, a no-op on
+# the 01.60 (online) build.
+set(R2_UNLOCK_FPS_PATCH "${CMAKE_CURRENT_SOURCE_DIR}/../tools/apply_r2_unlock_fps_patch.py")
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${R2_UNLOCK_FPS_PATCH}")
+execute_process(COMMAND "${Python3_EXECUTABLE}" "${R2_UNLOCK_FPS_PATCH}" "${RECOMP_DIR}"
+                RESULT_VARIABLE R2_UNLOCK_FPS_PATCH_RESULT)
+if(NOT R2_UNLOCK_FPS_PATCH_RESULT EQUAL 0)
+    message(FATAL_ERROR "Could not apply the Resistance 2 unlock-FPS hook")
+endif()
+
 # ---------------------------------------------------------------------------
 # ps3recomp runtime library
 # ---------------------------------------------------------------------------

@@ -184,10 +184,18 @@ vem a seguir. Mesma organização do roadmap do Resistance: Fall of Man.
 - [ ] 30 fps constantes no jogo todo, sem travamentos. Em 30/10/2026 a
   gameplay normal fica em 28–30 fps (eram 14,5) e os quadros de 100 ms ou
   mais caíram de 27 para uns 3 por minuto; falta o combate pesado.
-- [ ] Depois, 60 fps: trazer os patches da comunidade de destrave de quadros
-  e campo de visão do BCUS98120 para o `port/patches.cpp` e rodar o relógio de
-  vblank a 120 Hz com `g_res_vblank_hz` (que já existe no `port/patches.cpp`),
-  como o port do Resistance: Fall of Man faz com `RES_UNLOCK_FPS=1`.
+- [ ] (em andamento) Depois, 60 fps. Feito (14/11/2026): o "Unlock FPS" da
+  comunidade para a 01.00 (patch.yml do RPCS3, Whatcookie) como
+  `RES_UNLOCK_FPS=1` e um botão no launcher: os tempos mínimos escritos no
+  `port/patches.cpp`, os dois desvios do limitador de quadros postos atrás de
+  uma chave no código traduzido pelo `tools/apply_r2_unlock_fps_patch.py`.
+  Sem janela na primeira fase, com outro jogo rodando no Mac: 34,6 fps de
+  média, 48 no máximo. O que segura abaixo de 60 agora é a thread principal
+  esperando as tarefas das SPUs; no caminho se viu que o "dormir" na leitura
+  do relógio vindo do port do Resistance 3 atrasava essas esperas (destravado
+  22 -> 33 fps quando ele espera 20000 leituras antes de dormir, e a 30 fps
+  26,5 -> 28,8 fps com menos CPU). Falta: o patch de campo de visão, um
+  relógio de vblank a 120 Hz, uma rodada de um jogador.
 - [x] O launcher de desktop (`launcher/`, adaptado do port do Resistance: Fall
   of Man), com instalação em um clique e descriptografia sem o RPCS3.
 - [ ] Testar a instalação em um clique do começo ao fim num Mac limpo; um

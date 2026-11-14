@@ -197,6 +197,11 @@ pub struct Settings {
     /// PS3_FRAMECLOCK_US: the frame clock / RSX wake-up period (50 = the
     /// port's default; 1000 brings back the FIFO race).
     pub frame_clock_us: u32,
+    /// RES_UNLOCK_FPS=1: the campaign's frame limiter off (the community's
+    /// "Unlock FPS"), up to about 60 fps. Never online. Named apart from the
+    /// Resistance: Fall of Man launcher's old "unlockFps", which old settings
+    /// files may still carry and which must stay ignored.
+    pub fps60: bool,
     /// What tools/play.sh turns on for the log, each passed as it does:
     /// PS3_PAD_LOG=1 (controller button changes), PS3_TELEMETRY=1 (a [tele]
     /// line a second and the 3-second stall report), RSX_DRAIN_SPIKE_MS
@@ -299,6 +304,7 @@ impl Default for Settings {
             shader_async_jobs: 4,
             shader_sync_hit: 2,
             frame_clock_us: 50,
+            fps60: false,
             pad_log: true,
             telemetry: true,
             drain_spike_ms: 100,
@@ -1444,6 +1450,9 @@ fn launch_env(s: &Settings, disc: &Path, play: &Path, input: &InputEnv) -> Vec<(
     if s.frame_clock_us > 0 && s.frame_clock_us != 50 {
         set("PS3_FRAMECLOCK_US", s.frame_clock_us.clamp(10, 16000).to_string());
     }
+    if s.fps60 {
+        set("RES_UNLOCK_FPS", "1".into());
+    }
     if s.quiet_log {
         set("PS3_VERBOSE", "0".into());
     }
@@ -2259,6 +2268,7 @@ const FEATURE_MARKERS: &[&str] = &[
     "PS3_TELEMETRY",                   // the [tele] line and the stall report
     "PS3_PAD_ADAPTIVE",                // DualSense adaptive triggers
     "PS3_PAD_GYRO",                    // DualSense light bar and gyro aim
+    "RES_UNLOCK_FPS",                  // 60 fps in the campaign
     "PS3_FRAMEGEN_VPCONST",            // MetalFX frame generation
 ];
 
@@ -4712,6 +4722,15 @@ mod tests {
         let e: BTreeMap<String, String> = launch_env(&st, Path::new("/d"), Path::new("/p"), &InputEnv::default()).into_iter().collect();
         assert_eq!(e["PS3_AA"], "fxaa");
         assert!(!e.contains_key("RES_UNLOCK_FPS"));
+    }
+
+    #[test]
+    fn fps60_campaign_only() {
+        let st = Settings { fps60: true, ..Default::default() };
+        let e: BTreeMap<String, String> = launch_env(&st, Path::new("/d"), Path::new("/p"), &InputEnv::default()).into_iter().collect();
+        assert_eq!(e["RES_UNLOCK_FPS"], "1");
+        let o: BTreeMap<String, String> = online_env(&st, Path::new("/d"), Path::new("/p/online"), &InputEnv::default()).into_iter().collect();
+        assert!(!o.contains_key("RES_UNLOCK_FPS"));
     }
 
     #[test]

@@ -172,10 +172,17 @@ comes next. Same layout as the Resistance: Fall of Man roadmap.
   2026-10-30 normal gameplay holds 28–30 fps (was 14.5) and frames of 100 ms
   or more are down from 27 to about 3 a minute; heavy combat is what is
   left.
-- [ ] Then 60 fps: take the community's frame-rate unlock and field-of-view
-  patches for BCUS98120 into `port/patches.cpp` and run the vblank clock at
-  120 Hz through `g_res_vblank_hz` (already in `port/patches.cpp`), as the
-  Resistance: Fall of Man port does with `RES_UNLOCK_FPS=1`.
+- [ ] (in progress) Then 60 fps. Done (2026-11-14): the community's "Unlock
+  FPS" for 01.00 (RPCS3 patch.yml, Whatcookie) as `RES_UNLOCK_FPS=1` and a
+  launcher switch: the timesteps written in `port/patches.cpp`, the two
+  frame-limiter branches put behind a switch in the lifted code by
+  `tools/apply_r2_unlock_fps_patch.py`. Headless in the first level, with
+  another game running on the Mac: 34.6 fps on average, 48 at best. What
+  holds it below 60 now is the main thread waiting for its SPU jobs; on the
+  way the timebase-poll sleep from the Resistance 3 port was found to make
+  those waits late (unlocked 22 -> 33 fps once it waits 20000 reads before
+  sleeping, and at 30 fps 26.5 -> 28.8 fps with less CPU). Still to do: the
+  field-of-view patch, a 120 Hz vblank clock, a player's run.
 - [x] The desktop launcher (`launcher/`, adapted from the Resistance: Fall of
   Man port's), with a one-click install and decryption without RPCS3.
 - [ ] Test the one-click install end to end on a clean Mac; a release build
