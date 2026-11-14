@@ -202,6 +202,9 @@ pub struct Settings {
     /// Resistance: Fall of Man launcher's old "unlockFps", which old settings
     /// files may still carry and which must stay ignored.
     pub fps60: bool,
+    /// RES_FOV: the campaign's field-of-view factor, "" (the game's 1.0),
+    /// "0.85" or "0.7" (RPCS3's Extended FOV); smaller is wider.
+    pub fov: String,
     /// What tools/play.sh turns on for the log, each passed as it does:
     /// PS3_PAD_LOG=1 (controller button changes), PS3_TELEMETRY=1 (a [tele]
     /// line a second and the 3-second stall report), RSX_DRAIN_SPIKE_MS
@@ -305,6 +308,7 @@ impl Default for Settings {
             shader_sync_hit: 2,
             frame_clock_us: 50,
             fps60: false,
+            fov: String::new(),
             pad_log: true,
             telemetry: true,
             drain_spike_ms: 100,
@@ -1453,6 +1457,11 @@ fn launch_env(s: &Settings, disc: &Path, play: &Path, input: &InputEnv) -> Vec<(
     if s.fps60 {
         set("RES_UNLOCK_FPS", "1".into());
     }
+    if let Ok(f) = s.fov.trim().parse::<f32>() {
+        if (0.5..=1.2).contains(&f) && f != 1.0 {
+            set("RES_FOV", format!("{f}"));
+        }
+    }
     if s.quiet_log {
         set("PS3_VERBOSE", "0".into());
     }
@@ -2269,6 +2278,7 @@ const FEATURE_MARKERS: &[&str] = &[
     "PS3_PAD_ADAPTIVE",                // DualSense adaptive triggers
     "PS3_PAD_GYRO",                    // DualSense light bar and gyro aim
     "RES_UNLOCK_FPS",                  // 60 fps in the campaign
+    "RES_FOV",                         // the campaign's field of view
     "PS3_FRAMEGEN_VPCONST",            // MetalFX frame generation
 ];
 
@@ -4731,6 +4741,14 @@ mod tests {
         assert_eq!(e["RES_UNLOCK_FPS"], "1");
         let o: BTreeMap<String, String> = online_env(&st, Path::new("/d"), Path::new("/p/online"), &InputEnv::default()).into_iter().collect();
         assert!(!o.contains_key("RES_UNLOCK_FPS"));
+        let f = Settings { fov: "0.7".into(), ..Default::default() };
+        let e: BTreeMap<String, String> = launch_env(&f, Path::new("/d"), Path::new("/p"), &InputEnv::default()).into_iter().collect();
+        assert_eq!(e["RES_FOV"], "0.7");
+        for bad in ["", "1", "2", "abc"] {
+            let b = Settings { fov: bad.into(), ..Default::default() };
+            let e: BTreeMap<String, String> = launch_env(&b, Path::new("/d"), Path::new("/p"), &InputEnv::default()).into_iter().collect();
+            assert!(!e.contains_key("RES_FOV"), "{bad}");
+        }
     }
 
     #[test]

@@ -181,8 +181,9 @@ comes next. Same layout as the Resistance: Fall of Man roadmap.
   holds it below 60 now is the main thread waiting for its SPU jobs; on the
   way the timebase-poll sleep from the Resistance 3 port was found to make
   those waits late (unlocked 22 -> 33 fps once it waits 20000 reads before
-  sleeping, and at 30 fps 26.5 -> 28.8 fps with less CPU). Still to do: the
-  field-of-view patch, a 120 Hz vblank clock, a player's run.
+  sleeping, and at 30 fps 26.5 -> 28.8 fps with less CPU). The
+  field-of-view patch is in too (`RES_FOV`, a launcher choice; checked in a
+  frame dump at 0.7). Still to do: a 120 Hz vblank clock, a player's run.
 - [x] The desktop launcher (`launcher/`, adapted from the Resistance: Fall of
   Man port's), with a one-click install and decryption without RPCS3.
 - [ ] Test the one-click install end to end on a clean Mac; a release build

@@ -194,8 +194,9 @@ vem a seguir. Mesma organização do roadmap do Resistance: Fall of Man.
   esperando as tarefas das SPUs; no caminho se viu que o "dormir" na leitura
   do relógio vindo do port do Resistance 3 atrasava essas esperas (destravado
   22 -> 33 fps quando ele espera 20000 leituras antes de dormir, e a 30 fps
-  26,5 -> 28,8 fps com menos CPU). Falta: o patch de campo de visão, um
-  relógio de vblank a 120 Hz, uma rodada de um jogador.
+  26,5 -> 28,8 fps com menos CPU). O patch de campo de visão também entrou
+  (`RES_FOV`, uma escolha no launcher; conferido numa captura em 0,7). Falta:
+  um relógio de vblank a 120 Hz, uma rodada de um jogador.
 - [x] O launcher de desktop (`launcher/`, adaptado do port do Resistance: Fall
   of Man), com instalação em um clique e descriptografia sem o RPCS3.
 - [ ] Testar a instalação em um clique do começo ao fim num Mac limpo; um

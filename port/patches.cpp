@@ -10,6 +10,10 @@
  *                      (PS3_VBLANK_HZ=120 lets it run past that). Online (the
  *                      01.60 build) is never unlocked: the launcher refuses
  *                      the switch there, and that build has no hook.
+ *   RES_FOV=<factor>   campaign (01.00): the field-of-view factor (the
+ *                      game's own is 1.0; RPCS3's "Extended FOV" by illusion
+ *                      is 0.7, smaller is wider). RPCS3 notes it misaligns
+ *                      the shadows a little. 0.5 to 1.2.
  *
  * A patch is two halves. The data half (the timesteps) is written into guest
  * memory here, after the ELF is loaded and before the guest starts. The code
@@ -86,6 +90,18 @@ extern "C" void res_apply_patches(void)
         } else {
             std::fprintf(stderr, "[patch] RES_UNLOCK_FPS: this executable is not the 01.00 one the patch is for; "
                                  "left at 30 fps\n");
+        }
+    }
+    const char* fov = std::getenv("RES_FOV");
+    if (fov && *fov) {
+        const float f = (float)std::atof(fov);
+        if (f >= 0.5f && f <= 1.2f && vm_read32(0x00DE67E0u) == 0x3EDBB51Eu && vm_read32(0x00DE67E4u) == 0x3F800000u) {
+            uint32_t bits;
+            memcpy(&bits, &f, 4);
+            vm_write32(0x00DE67E4u, bits);
+            std::fprintf(stderr, "[patch] RES_FOV: field-of-view factor %.2f (01.00)\n", (double)f);
+        } else {
+            std::fprintf(stderr, "[patch] RES_FOV=%s: out of 0.5..1.2, or not the 01.00 executable; left as is\n", fov);
         }
     }
     const char* setting = std::getenv("RES_FRONTEND_PORT0");
