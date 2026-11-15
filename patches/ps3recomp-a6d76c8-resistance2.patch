@@ -9786,7 +9786,7 @@ index 5a1d37f..534c24d 100644
  }
  
 diff --git a/libs/system/cellSaveData.c b/libs/system/cellSaveData.c
-index 286bf47..c2e5301 100644
+index 286bf47..c6235a4 100644
 --- a/libs/system/cellSaveData.c
 +++ b/libs/system/cellSaveData.c
 @@ -62,8 +62,16 @@ static void adopt_gamedata_root(void)
@@ -9807,7 +9807,25 @@ index 286bf47..c2e5301 100644
  }
  
  /* Ensure directory (and parents) exist */
-@@ -531,50 +539,50 @@ static u32 savedata_content_type(const char* name)
+@@ -264,6 +272,17 @@ static s32 dispatch_func_file(uint32_t func_opd, uint32_t* userdata_ea,
+     out->fileOperation = vm_read32(set_ea);
+     out->fileType = vm_read32(set_ea + 8);
+     memcpy(out->secureFileId, vm_base + set_ea + 12, 16);
++    /* PS3_SAVEDATA_LOG_SFID=1 (diagnostic): the title's secure file ID, the
++     * key a real console's protected save files are encrypted with (what
++     * pfdtool calls secure_file_id), said once. */
++    { static int said = -1;
++      if (said < 0) { const char* e = getenv("PS3_SAVEDATA_LOG_SFID"); said = (e && *e == '1') ? 0 : 1; }
++      if (!said && out->fileType == CELL_SAVEDATA_FILETYPE_SECUREFILE) {
++          said = 1;
++          fprintf(stderr, "[cellSaveData] secure file id: ");
++          for (int i = 0; i < 16; i++) fprintf(stderr, "%02X", out->secureFileId[i]);
++          fprintf(stderr, "\n");
++      } }
+     u32 name = vm_read32(set_ea + 28), buffer = vm_read32(set_ea + 44);
+     out->fileName = name ? (char*)vm_base + name : NULL;
+     out->fileOffset = vm_read32(set_ea + 32);
+@@ -531,50 +550,50 @@ static u32 savedata_content_type(const char* name)
      return CELL_SAVEDATA_FILETYPE_NORMALFILE;
  }
  
@@ -9902,7 +9920,7 @@ index 286bf47..c2e5301 100644
  /* Enumerate files in a save directory. Returns count, fills fileList up to max. */
  static u32 enumerate_save_files(const char* save_path,
                                   CellSaveDataFileStat* fileList, u32 max)
-@@ -595,7 +603,7 @@ static u32 enumerate_save_files(const char* save_path,
+@@ -595,7 +614,7 @@ static u32 enumerate_save_files(const char* save_path,
                  continue;
              if (count < max && fileList) {
                  memset(&fileList[count], 0, sizeof(CellSaveDataFileStat));
@@ -9911,7 +9929,7 @@ index 286bf47..c2e5301 100644
                  strncpy(fileList[count].fileName, fd.cFileName,
                          CELL_SAVEDATA_FILENAME_SIZE - 1);
                  ULARGE_INTEGER sz;
-@@ -632,7 +640,7 @@ static u32 enumerate_save_files(const char* save_path,
+@@ -632,7 +651,7 @@ static u32 enumerate_save_files(const char* save_path,
  #endif
              if (count < max && fileList) {
                  memset(&fileList[count], 0, sizeof(CellSaveDataFileStat));
@@ -9920,7 +9938,7 @@ index 286bf47..c2e5301 100644
                  strncpy(fileList[count].fileName, de->d_name,
                          CELL_SAVEDATA_FILENAME_SIZE - 1);
                  fileList[count].st_size = (u64)st.st_size;
-@@ -737,8 +745,8 @@ static s32 process_file_op(const char* save_path, CellSaveDataFileSet* set)
+@@ -737,8 +756,8 @@ static s32 process_file_op(const char* save_path, CellSaveDataFileSet* set)
          size_t wrote = fwrite(set->fileBuf, 1, write_size, fp);
          int failed = wrote != write_size;
          if (fclose(fp) != 0) failed = 1;
@@ -9931,7 +9949,7 @@ index 286bf47..c2e5301 100644
          return failed ? CELL_SAVEDATA_ERROR_ACCESS_ERROR : (s32)wrote;
      }
  
-@@ -842,11 +850,39 @@ static void read_param_sfo(const char* save_path, CellSaveDataSystemFileParam* p
+@@ -842,11 +861,39 @@ static void read_param_sfo(const char* save_path, CellSaveDataSystemFileParam* p
  }
  
  /* Core save/load implementation shared by List/Fixed/Auto variants */
@@ -9971,7 +9989,7 @@ index 286bf47..c2e5301 100644
  {
      if (!dirName || !funcStat)
          return CELL_SAVEDATA_ERROR_PARAM;
-@@ -1551,6 +1587,91 @@ static void hle_cellSaveDataUserAutoSave(ppu_context* ctx)
+@@ -1551,6 +1598,91 @@ static void hle_cellSaveDataUserAutoSave(ppu_context* ctx)
                               container, (void*)(uintptr_t)userdata);
  }
  
@@ -10063,7 +10081,7 @@ index 286bf47..c2e5301 100644
  /* ListAutoLoad's ninth argument is in the guest parameter save area. */
  void ps3_savedata_list_auto_load(ppu_context* ctx)
  {
-@@ -1572,6 +1693,16 @@ void cellSaveData_register_ctx_handlers(void)
+@@ -1572,6 +1704,16 @@ void cellSaveData_register_ctx_handlers(void)
                           hle_cellSaveDataUserAutoLoad);
      ps3_hle_register_ctx(0x52AAC4FAu, "cellSaveDataUserAutoSave",
                           hle_cellSaveDataUserAutoSave);
