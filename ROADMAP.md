@@ -164,7 +164,16 @@ comes next. Same layout as the Resistance: Fall of Man roadmap.
 - [ ] Measure the relocatable lifts on a hot machine (thermal throttling).
 - [ ] Validate the ps3recomp v0.19 ports (#670, #693, #635, #666, #659) and
   rebase the toolkit patch on v0.19.
-- [ ] The levels after `bay area`.
+- [x] Every campaign level loads and plays (2026-11-14): a 100% save (the
+  European release's, decrypted with the game's own secure file id, all
+  `FF`, which `PS3_SAVEDATA_LOG_SFID=1` reports) in a throwaway copy of the
+  HDD unlocks Load Level, and a headless sweep entered the first checkpoint
+  of each of the ten levels on Normal, through the intro movie, into
+  gameplay: Iceland, San Francisco, Orick (scotia), Scotia Ship, Twin Falls,
+  Badlands, Chicago, Iceland 2, Bayou and Chicxulub. No GPU or SPU timeout,
+  every picture right. Hot Mac, headless: 28-30 fps in most, Twin Falls 18
+  and Chicago 21 (the heaviest); the Orick intro movie ran at 6-12 fps.
+  Not yet: playing each level through.
 - [ ] `RES_LEVEL=<n>`: confirm whether the EBOOT honours `-level`.
 - [ ] Find out why the front end leaves port 0 disabled, and replace the
   hook with the real cause's fix.

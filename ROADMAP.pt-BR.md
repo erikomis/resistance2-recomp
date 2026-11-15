@@ -177,7 +177,17 @@ vem a seguir. Mesma organização do roadmap do Resistance: Fall of Man.
 - [ ] Medir a tradução relocável com a máquina quente (aquecimento).
 - [ ] Validar o que foi trazido do ps3recomp v0.19 (#670, #693, #635, #666,
   #659) e atualizar o patch do toolkit para a v0.19.
-- [ ] As fases depois de `bay area`.
+- [x] Todas as fases da campanha carregam e rodam (14/11/2026): um save 100%
+  (o da versão europeia, descriptografado com a própria chave de arquivo
+  seguro do jogo, toda `FF`, que o `PS3_SAVEDATA_LOG_SFID=1` mostra) numa
+  cópia descartável do HDD libera o Load Level, e uma varredura sem janela
+  entrou no primeiro checkpoint de cada uma das dez fases no Normal, passou o
+  vídeo de abertura e chegou à gameplay: Islândia, San Francisco, Orick
+  (scotia), Scotia Ship, Twin Falls, Badlands, Chicago, Islândia 2, Bayou e
+  Chicxulub. Nenhum timeout de GPU ou SPU, todas as imagens certas. Mac
+  quente, sem janela: 28-30 fps na maioria, Twin Falls 18 e Chicago 21 (as
+  mais pesadas); o vídeo de abertura de Orick rodou a 6-12 fps. Falta: jogar
+  cada fase até o fim.
 - [ ] `RES_LEVEL=<n>`: confirmar se o EBOOT aceita `-level`.
 - [ ] Descobrir por que o front end deixa o port 0 desabilitado e trocar o
   hook pela correção da causa real.
