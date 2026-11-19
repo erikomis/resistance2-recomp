@@ -34,6 +34,12 @@ do mesmo autor. Veja [CREDITS.pt-BR.md](CREDITS.pt-BR.md).
 > da própria cópia legítima. Projeto de fã, sem afiliação com a Sony
 > Interactive Entertainment ou a Insomniac Games.
 
+## Metadados do projeto
+
+Os metadados do projeto para catálogos e ferramentas ficam em [`.recomp.json`](.recomp.json),
+conforme a [especificação do recomp.board](https://recomp.fyi/spec). Mantenha o arquivo
+atualizado quando mudar o estado do projeto, a versão do jogo suportada ou as plataformas de destino.
+
 ## Estado
 
 Em 30/10/2026: boot → vídeos de abertura → menus → New Game → a primeira

@@ -34,6 +34,12 @@ See [CREDITS.md](CREDITS.md).
 > their own legitimate copy. A fan project, not affiliated with Sony
 > Interactive Entertainment or Insomniac Games.
 
+## Project metadata
+
+Project metadata for directories and tools lives in [`.recomp.json`](.recomp.json),
+following the [recomp.board specification](https://recomp.fyi/spec). Keep it
+updated when the project status, supported game version or target platforms change.
+
 ## Status
 
 As of 2026-10-30: boot → intro movies → menus → New Game → the first level

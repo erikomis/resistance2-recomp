@@ -1,0 +1,15 @@
+{
+  "$schema": "https://recomp.fyi/schema/v1.json",
+  "game": "Resistance 2",
+  "system": "PS3",
+  "type": "recomp",
+  "original": {
+    "serial": "BCUS98120"
+  },
+  "status": "released",
+  "targets": [
+    "macOS"
+  ],
+  "toolchain": "ps3recomp",
+  "notes": "Public alpha for Apple silicon Macs. The campaign has been played through Iceland into the Bay Area, not to the end. Community-server online play has been tested with update 01.60; heavy scenes can run below 30 fps."
+}
